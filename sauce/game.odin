@@ -65,6 +65,12 @@ Game_State :: struct {
 	lights: [dynamic]Light_Source,
 	max_lights: int,
 
+	enemy_spawn_timer: f32,
+	enemy_spawn_interval: f32,
+	max_enemies: int,
+	current_enemy_count: int,
+	last_night_check: bool,
+
 	scratch: struct {
 		all_entities: []Entity_Handle,
 	}
@@ -145,6 +151,14 @@ Entity :: struct {
 		dead,
 	},
 
+	// enemy fields
+	speed: f32,
+	damage: f32,
+	sunlight_damage_timer: f32,
+	sunlight_damage_interval: f32,
+	last_damage_time: f64,
+	damage_cooldown: f32,
+
 	// this gets zeroed every frame. Useful for passing data to other systems.
 	scratch: struct {
 		col_override: Vec4,
@@ -154,8 +168,8 @@ Entity :: struct {
 Entity_Kind :: enum {
 	nil,
 	player,
-	thing1,
 	torch,
+	enemy,
 }
 
 entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
@@ -166,8 +180,8 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 	switch kind {
 		case .nil:
 		case .player: setup_player(e)
-		case .thing1: setup_thing1(e)
 		case .torch:  setup_torch(e)
+		case .enemy:  setup_enemy(e)
 	}
 }
 
@@ -224,12 +238,20 @@ game_update :: proc() {
 		torch := entity_create(.torch)
 		torch.pos = Vec2{20,20}
 
+		torch1 := entity_create(.torch)
+		torch1.pos = Vec2{-40,20}
+
 		player := entity_create(.player)
 		ctx.gs.player_handle = player.handle
 
+		ctx.gs.day_cycle_speed = 0.05 // 200 seconds -> 0.005
+		ctx.gs.time_of_day = 0.1
 
-		ctx.gs.day_cycle_speed = 0.005 // 200 seconds
-		ctx.gs.time_of_day = 0.0
+		ctx.gs.enemy_spawn_interval = 3.0
+		ctx.gs.enemy_spawn_timer = 0.0
+		ctx.gs.max_enemies = 10
+		ctx.gs.current_enemy_count = 0
+		ctx.gs.last_night_check = false
 	}
 
 	rebuild_scratch_helpers()
@@ -264,6 +286,23 @@ game_update :: proc() {
 	}
 
 	update_lights()
+
+	is_night := ctx.gs.time_of_day >= 0.5 || ctx.gs.time_of_day < 0.1
+
+	if is_night {
+		ctx.gs.enemy_spawn_timer += ctx.delta_t
+		if ctx.gs.enemy_spawn_timer >= ctx.gs.enemy_spawn_interval {
+			spawn_enemy()
+			ctx.gs.enemy_spawn_timer = 0.0
+		}
+	} else {
+		ctx.gs.enemy_spawn_timer = 0.0
+	}
+
+	if !ctx.gs.last_night_check && !is_night {
+		log.info("Dawn breaks")
+	}
+	ctx.gs.last_night_check = is_night
 
 	// TESTING DAY AND NIGHT
 	if input.key_pressed(.L) {
@@ -304,9 +343,6 @@ game_draw :: proc() {
 	// world
 	{
 		draw.push_coord_space(get_world_space())
-
-		draw.draw_sprite({10, 10}, .player_still, col_override=Vec4{1,0,0,0.4})
-		draw.draw_sprite({-10, 10}, .player_still)
 
 		draw.draw_text({0, -50}, "sugon", pivot=.bottom_center, col={0,0,0,0.5})
 
@@ -484,10 +520,6 @@ respawn_player :: proc(e: ^Entity) {
 	// play sound
 }
 
-setup_thing1 :: proc(using e: ^Entity) {
-	kind = .thing1
-}
-
 entity_set_animation :: proc(e: ^Entity, sprite: Sprite_Name, frame_duration: f32, looping:=true) {
 	if e.sprite != sprite {
 		e.sprite = sprite
@@ -615,4 +647,136 @@ setup_torch :: proc(e: ^Entity) {
 
 		update_light_position(e.light_index, e.pos)
 	}
+}
+
+setup_enemy :: proc(e: ^Entity) {
+	e.kind = .enemy
+	e.sprite = .player_idle
+	e.health = 3.0
+	e.max_health = 3.0
+	e.speed = 30.0
+	e.damage = 2.0
+	e.damage_cooldown = 1.0
+	e.sunlight_damage_interval = 0.5
+	e.sunlight_damage_timer = 0.0
+	e.last_damage_time = 0.0
+
+	e.draw_offset = Vec2{0.5, 5}
+	e.draw_pivot = .bottom_center
+
+	ctx.gs.current_enemy_count += 1
+
+	e.update_proc = proc(e: ^Entity) {
+		player := get_player()
+		if player == nil || player.state != .alive {
+			return
+		}
+
+		is_day := ctx.gs.time_of_day > 0.1 && ctx.gs.time_of_day < 0.5
+		if is_day {
+			e.sunlight_damage_timer += ctx.delta_t
+			if e.sunlight_damage_timer >= e.sunlight_damage_interval {
+				e.health -= 1.0
+				e.sunlight_damage_timer = 0.0
+				e.hit_flash = Vec4{1, 1, 0, 0.8}
+			}
+		}
+
+		if e.health <= 0 {
+			ctx.gs.current_enemy_count -= 1
+			entity_destroy(e)
+			return
+		}
+
+		direction := linalg.normalize(player.pos - e.pos)
+		e.pos += direction * e.speed * ctx.delta_t
+
+		if direction.x != 0 {
+			e.flip_x = direction.x < 0
+		}
+
+		entity_set_animation(e, .player_run, 0.15)
+
+		enemy_rect := shape.rect_make(e.pos - Vec2{8, 0}, Vec2{16, 16}, Pivot.center_center)
+		player_rect := shape.rect_make(player.pos - Vec2{8, 0}, Vec2{16, 16}, Pivot.center_center)
+
+		if colliding, _:= shape.collide(enemy_rect, player_rect); colliding {
+			current_time := now()
+			if current_time - e.last_damage_time >= f64(e.damage_cooldown) {
+				player.health -= e.damage
+				player.hit_flash = Vec4{1, 0, 0, 0.8}
+				e.last_damage_time = current_time
+
+				// play hit sound
+			}
+		}
+
+		if e.hit_flash.a > 0.0 {
+			e.hit_flash.a -= ctx.delta_t * 3.0
+			if e.hit_flash.a < 0.0 {
+				e.hit_flash.a = 0.0
+			}
+		}
+	}
+
+	e.draw_proc = proc(e: Entity) {
+		e := e
+		draw.draw_sprite(e.pos, .shadow_medium, col = {1, 1, 1, 0.2})
+
+		col_override := Vec4{0.8, 0.2, 0.2, 0.6}
+		if e.hit_flash.a > 0.0 {
+			col_override = Vec4{
+				max(col_override.r, e.hit_flash.r),
+				max(col_override.g, e.hit_flash.g),
+				max(col_override.b, e.hit_flash.b),
+				max(col_override.a, e.hit_flash.a),
+			}
+		}
+
+		draw_sprite_entity(&e, e.pos, e.sprite,
+							flip_x = e.flip_x,
+							draw_offset = e.draw_offset,
+							pivot = e.draw_pivot,
+							anim_index = e.anim_index,
+							col_override = col_override)
+	}
+}
+
+get_spawn_position_offscreen :: proc() -> Vec2 {
+	cam_pos := ctx.gs.cam_pos
+	zoom := get_camera_zoom()
+	viewport_width := f32(window_w) / zoom
+	viewport_height := f32(window_h) / zoom
+
+	spawn_distance := f32(100)
+
+	side := utils.rand_int(4)
+
+	spawn_pos: Vec2
+
+	switch side {
+	case 0: // Top
+		spawn_pos.x = cam_pos.x + utils.rand_f32_range(-viewport_width/2 - spawn_distance, viewport_width/2 + spawn_distance)
+		spawn_pos.y = cam_pos.y + viewport_height/2 + spawn_distance
+	case 1: // Right
+		spawn_pos.x = cam_pos.x + viewport_width/2 + spawn_distance
+		spawn_pos.y = cam_pos.y + utils.rand_f32_range(-viewport_height/2 - spawn_distance, viewport_height/2 + spawn_distance)
+	case 2: // Bottom
+		spawn_pos.x = cam_pos.x + utils.rand_f32_range(-viewport_width/2 - spawn_distance, viewport_width/2 + spawn_distance)
+		spawn_pos.y = cam_pos.y - viewport_height/2 - spawn_distance
+	case 3: // Left
+		spawn_pos.x = cam_pos.x - viewport_width/2 - spawn_distance
+		spawn_pos.y = cam_pos.y + utils.rand_f32_range(-viewport_height/2 - spawn_distance, viewport_height/2 + spawn_distance)
+	}
+
+	return spawn_pos
+}
+
+spawn_enemy :: proc() {
+	if ctx.gs.current_enemy_count >= ctx.gs.max_enemies {
+		return
+	}
+
+	enemy := entity_create(.enemy)
+	enemy.pos = get_spawn_position_offscreen()
 }
