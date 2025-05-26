@@ -4,56 +4,10 @@ CHANGELOG
 innit
 
 --- v0.2
-Fixed subfolders not being created in build
-Moved logger into utils package
-
---- v0.3
-Change all_entities helper array to use handles instead of pointers.
-Call setup function on zero entity so dummy function pointers can be patched in and not crash.
-Added sound package
-Added input action consume function
-
---- v0.4
-Platform target in build
-Added mac support
-Added ols.json for better LSP control
-
---- v0.5
-Empty shape now behaves as expected
-is_valid helper
-
---- v0.6
-Removed old is_invalid to replace with new is_valid
-
---- v0.7
-schloop one-shot sound on click example
-Added any_key_press_and_consume
-Added mouse_pos_in_current_space 
-raw_button helper for ui button stuff
-
---- v0.8
-Massive overhaul of template to be more friendly for future updates.
-Moved most of the core stuff into the /bald package collection
-Moved core_render into the /draw package
-Moved core_input into the /input package
-Added bald_helpers file for a single upgrade point for all helper functions
-
---- TODO :next
-
-
-put build into /bald ???
-
-make shader more abstract so it's easier to update
-
-
-maybe rethink how the get world space function works?
-we kinda want to hard code a get mouse pos in world space... maybe
-
-
-
-
-text wrapping
-
-simple main menu / UI demo
-
-line drawing
+health and food. DONE.
+dying.
+biomes or chunks.
+day & night cycle.
+enemies.
+spawn trees randomly.
+break trees when punching.

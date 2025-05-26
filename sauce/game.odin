@@ -16,6 +16,7 @@ import "bald:draw"
 import "bald:sound"
 import "bald:utils"
 import "bald:utils/color"
+import "bald:utils/shape"
 
 import "core:log"
 import "core:fmt"
@@ -26,8 +27,8 @@ import "core:math/linalg"
 import sapp "bald:sokol/app"
 import spall "core:prof/spall"
 
-VERSION :string: "v0.0.0"
-WINDOW_TITLE :: "Template [bald]"
+VERSION :string: "v0.0.1"
+WINDOW_TITLE :: "Makis Adventures"
 GAME_RES_WIDTH :: 480
 GAME_RES_HEIGHT :: 270
 window_w := 1280
@@ -108,9 +109,16 @@ Entity :: struct {
 	hit_flash: Vec4,
 	sprite: Sprite_Name,
 	anim_index: int,
-  next_frame_end_time: f64,
-  loop: bool,
-  frame_duration: f32,
+  	next_frame_end_time: f64,
+  	loop: bool,
+  	frame_duration: f32,
+
+	health: f32,
+	max_health: f32,
+	hunger: f32,
+	max_hunger: f32,
+	time_since_last_hunger_damage: f32,
+	running_time: f32,
 
 	// this gets zeroed every frame. Useful for passing data to other systems.
 	scratch: struct {
@@ -155,10 +163,10 @@ app_frame :: proc() {
 		x, y := screen_pivot(.top_left)
 		x += 2
 		y -= 2
-		draw.draw_text({x, y}, "hello world.", z_layer=.ui, pivot=Pivot.top_left)
+		//draw.draw_text({x, y}, "hello world.", z_layer=.ui, pivot=Pivot.top_left)
 	}
 
-	sound.play_continuously("event:/ambiance", "")
+	//sound.play_continuously("event:/ambiance", "")
 
 	game_update()
 	game_draw()
@@ -247,12 +255,43 @@ game_draw :: proc() {
 		draw.draw_sprite({10, 10}, .player_still, col_override=Vec4{1,0,0,0.4})
 		draw.draw_sprite({-10, 10}, .player_still)
 
-		draw.draw_text({0, -50}, "sugon", pivot=.bottom_center, col={0,0,0,0.1})
+		draw.draw_text({0, -50}, "sugon", pivot=.bottom_center, col={0,0,0,0.5})
 
 		for handle in get_all_ents() {
 			e := entity_from_handle(handle)
 			e.draw_proc(e^)
 		}
+	}
+
+	// ui?
+	{
+		draw.push_coord_space(get_screen_space())
+
+		player := get_player()
+
+		bar_width := f32(100)
+		bar_height := f32(10)
+		bar_spacing := f32(10)
+		x, y := screen_pivot(.top_left)
+		x += 2
+		y -= 20
+		bar_x := x
+		health_bar_y := y
+		hunger_bar_y := y - 12
+
+		health_bg_rect := Rect{bar_x, health_bar_y, bar_x + bar_width, health_bar_y + bar_height}
+		draw.draw_rect(health_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9})
+
+		health_fill_width := (player.health / player.max_health) * bar_width
+		health_fill_rect := Rect{bar_x, health_bar_y, bar_x + health_fill_width, health_bar_y + bar_height}
+		draw.draw_rect(health_fill_rect, col = Vec4{1.0, 0.0, 0.0, 0.8})
+
+		hunger_bg_rect := Rect{bar_x, hunger_bar_y, bar_x + bar_width, hunger_bar_y + bar_height}
+		draw.draw_rect(hunger_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9})
+
+		hunger_fill_width := (player.hunger / player.max_hunger) * bar_width
+		hunger_fill_rect := Rect{bar_x, hunger_bar_y, bar_x + hunger_fill_width, hunger_bar_y + bar_height}
+		draw.draw_rect(hunger_fill_rect, col = Vec4{0.8, 0.6, 0.0, 0.8})
 	}
 }
 
@@ -274,14 +313,22 @@ get_player :: proc() -> ^Entity {
 setup_player :: proc(e: ^Entity) {
 	e.kind = .player
 
+	e.max_health = 20.0
+	e.health = e.max_health
+	e.max_hunger = 10.0
+	e.hunger = e.max_hunger
+	e.time_since_last_hunger_damage = 0.0
+	e.running_time = 0.0
+
 	// this offset is to take it from the bottom center of the aseprite document
 	// and center it at the feet
 	e.draw_offset = Vec2{0.5, 5}
 	e.draw_pivot = .bottom_center
 
 	e.update_proc = proc(e: ^Entity) {
-
 		input_dir := get_input_vector()
+		is_running := input_dir != {}
+
 		e.pos += input_dir * 100.0 * ctx.delta_t
 
 		if input_dir.x != 0 {
@@ -290,10 +337,48 @@ setup_player :: proc(e: ^Entity) {
 
 		e.flip_x = e.last_known_x_dir < 0
 
-		if input_dir == {} {
+		if !is_running  {
 			entity_set_animation(e, .player_idle, 0.3)
+			e.running_time = 0.0 // reset when not running
 		} else {
 			entity_set_animation(e, .player_run, 0.1)
+
+			e.running_time += ctx.delta_t
+
+			if e.running_time > 1.0 {
+				e.hunger -= (ctx.delta_t / 30.0)
+				if e.hunger < 0.0 {
+					e.hunger = 0.0
+				}
+			}
+		}
+
+		if e.hunger <= 0.0 {
+			e.time_since_last_hunger_damage += ctx.delta_t
+			if e.time_since_last_hunger_damage >= 2.0 {
+				e.health -= 1.0
+				e.time_since_last_hunger_damage = 0.0
+
+				e.hit_flash = Vec4{1, 0, 0, 0.5}
+			}
+		}
+
+		if input.key_pressed(.H) {
+			e.health -= 1.0
+			input.consume_key_pressed(.H)
+
+			e.hit_flash = Vec4{1, 0, 0, 0.5}
+		}
+
+		if e.health < 0.0 {
+			e.health = 0.0
+		}
+
+		if e.hit_flash.a > 0.0 {
+			e.hit_flash.a -= ctx.delta_t * 2.0
+			if e.hit_flash.a < 0.0 {
+				e.hit_flash.a = 0.0
+			}
 		}
 
 		e.scratch.col_override = Vec4{0,0,1,0.2}
@@ -318,6 +403,7 @@ entity_set_animation :: proc(e: ^Entity, sprite: Sprite_Name, frame_duration: f3
 		e.next_frame_end_time = 0
 	}
 }
+
 update_entity_animation :: proc(e: ^Entity) {
 	if e.frame_duration == 0 do return
 
