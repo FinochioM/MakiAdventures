@@ -297,12 +297,14 @@ game_draw :: proc() {
 
 		darkness := 0.0
 
-		if ctx.gs.time_of_day < 0.25 {
-			darkness = 0.7 * auto_cast (1.0 - ctx.gs.time_of_day / 0.25)
-		} else if ctx.gs.time_of_day < 0.75 {
+		if ctx.gs.time_of_day < 0.1 {
+			darkness = 0.7 * auto_cast (1.0 - ctx.gs.time_of_day / 0.1)
+		} else if ctx.gs.time_of_day < 0.5 {
 			darkness = 0.0
+		} else if ctx.gs.time_of_day < 0.6 {
+			darkness = 0.7 * auto_cast ((ctx.gs.time_of_day - 0.5) / 0.1)
 		} else {
-			darkness = 0.7 * auto_cast((ctx.gs.time_of_day - 0.75) / 0.25)
+			darkness = 0.7
 		}
 
 		night_color := Vec4{0.05, 0.05,0.2, auto_cast darkness}
