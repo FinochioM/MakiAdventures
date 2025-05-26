@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{8a0b42ad-d615-4058-abfb-f5164be9cf9e}">
+		<property name="assetPath">
+			<value>schlooop.flac</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>44.0999985</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>1.1823582766439908</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{304913a8-78c1-49da-bacc-eee81f97dfb6}</destination>
+		</relationship>
+	</object>
+</objects>

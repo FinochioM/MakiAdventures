@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.02.00">
+	<object class="AudioFile" id="{bb38130a-c22e-4010-ac1c-afd80470c037}">
+		<property name="assetPath">
+			<value>03 Wind_grass_ strong_hurricane blast 3.flac</value>
+		</property>
+		<property name="isStreaming">
+			<value>true</value>
+		</property>
+		<property name="frequencyInKHz">
+			<value>96</value>
+		</property>
+		<property name="channelCount">
+			<value>2</value>
+		</property>
+		<property name="length">
+			<value>80.147020833333329</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{304913a8-78c1-49da-bacc-eee81f97dfb6}</destination>
+		</relationship>
+	</object>
+</objects>
