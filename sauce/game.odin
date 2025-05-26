@@ -163,6 +163,11 @@ Entity :: struct {
 	attack_damage: f32,
 	attack_cooldown: f32,
 	last_attack_time: f64,
+    show_attack_rect: bool,
+    attack_rect_pos: Vec2,
+    attack_rect_size: Vec2,
+    attack_rect_duration: f32,
+    attack_rect_timer: f32,
 
 	// this gets zeroed every frame. Useful for passing data to other systems.
 	scratch: struct {
@@ -241,10 +246,10 @@ game_update :: proc() {
 		init_lightning()
 
 		torch := entity_create(.torch)
-		torch.pos = Vec2{20,20}
+		torch.pos = Vec2{40,20}
 
 		torch1 := entity_create(.torch)
-		torch1.pos = Vec2{-40,20}
+		torch1.pos = Vec2{-60,20}
 
 		player := entity_create(.player)
 		ctx.gs.player_handle = player.handle
@@ -419,6 +424,10 @@ setup_player :: proc(e: ^Entity) {
 	e.attack_cooldown = 0.5
 	e.last_attack_time = 0.0
 
+    e.show_attack_rect = false
+    e.attack_rect_duration = 0.3
+    e.attack_rect_timer = 0
+
 	// this offset is to take it from the bottom center of the aseprite document
 	// and center it at the feet
 	e.draw_offset = Vec2{0.5, 5}
@@ -488,6 +497,13 @@ setup_player :: proc(e: ^Entity) {
 				}
 			}
 
+            if e.show_attack_rect {
+                e.attack_rect_timer += ctx.delta_t
+                if e.attack_rect_timer >= e.attack_rect_duration {
+                    e.show_attack_rect = false
+                }
+            }
+
 			if input.key_pressed(.H) {
 				e.health -= 1.0
 				input.consume_key_pressed(.H)
@@ -512,6 +528,15 @@ setup_player :: proc(e: ^Entity) {
 		e.draw_proc = proc(e: Entity) {
 			draw.draw_sprite(e.pos, .shadow_medium, col={1,1,1,0.2})
 			draw_entity_default(e)
+
+           if e.show_attack_rect {
+                // Calculate alpha based on remaining time
+                alpha := 1.0 - (e.attack_rect_timer / e.attack_rect_duration)
+
+                // Create rect and draw it
+                attack_rect := shape.rect_make(e.attack_rect_pos, e.attack_rect_size, utils.Pivot.center_center)
+                draw.draw_rect(attack_rect, col=Vec4{1, 0, 0, alpha * 0.5}, outline_col=Vec4{1, 0, 0, alpha})
+            }
 		}
 	}
 }
@@ -588,7 +613,7 @@ add_light :: proc(pos: Vec2, radius: f32, color: Vec4, intensity: f32, flicker: 
 		active = true,
 		flicker = flicker,
 		flicker_speed = 5.0,
-		flicker_amount = 0.2,
+		flicker_amount = 0.05,
 	}
 
 	append(&ctx.gs.lights, light)
@@ -793,8 +818,26 @@ spawn_enemy :: proc() {
 player_attack :: proc(player: ^Entity) {
     mouse_pos := mouse_pos_in_current_space()
 
+    max_attack_range := f32(20.0)
+    sprite_size := Vec2{16.0, 16.0}
+    player_visual_center := player.pos + Vec2{0, sprite_size.y * 0.5 - player.draw_offset.y}
+
+    center_to_mouse_dist := linalg.length(player_visual_center - mouse_pos)
+
+    attack_pos := mouse_pos
+    if center_to_mouse_dist > max_attack_range {
+        attack_dir := linalg.normalize(mouse_pos - player_visual_center)
+        attack_pos = player_visual_center + attack_dir * max_attack_range
+    }
+
     attack_size := Vec2{20.0, 20.0}
-    attack_rect := shape.rect_make(mouse_pos - attack_size / 2, attack_size, utils.Pivot.center_center)
+    attack_rect := shape.rect_make(attack_pos - attack_size / 2, attack_size, utils.Pivot.center_center)
+
+    player.show_attack_rect = true
+    player.attack_rect_pos = attack_pos
+    player.attack_rect_size = attack_size
+    player.attack_rect_timer = 0
+    player.attack_rect_duration = 0.3
 
     for handle in get_all_ents() {
         e := entity_from_handle(handle)
@@ -811,9 +854,6 @@ player_attack :: proc(player: ^Entity) {
         if colliding, _ := shape.collide(attack_rect, enemy_circle); colliding {
             e.health -= player.attack_damage
             e.hit_flash = Vec4{1, 0.5, 0, 0.8}
-
-            // play attack sound
-
             break
         }
     }
