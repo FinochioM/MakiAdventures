@@ -47,6 +47,7 @@ Quad_Flags :: enum u8 {
 	flag2 = (1<<1),
 	flag3 = (1<<2),
 	ligth_source = (1<<3), // flag for light sources
+	ui_element = (1<<4),
 }
 
 ZLayer :: enum u8 {

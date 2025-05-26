@@ -323,6 +323,8 @@ game_draw :: proc() {
 
 		player := get_player()
 
+		flags := Quad_Flags.ui_element
+
 		bar_width := f32(100)
 		bar_height := f32(10)
 		bar_spacing := f32(10)
@@ -334,18 +336,18 @@ game_draw :: proc() {
 		hunger_bar_y := y - 12
 
 		health_bg_rect := Rect{bar_x, health_bar_y, bar_x + bar_width, health_bar_y + bar_height}
-		draw.draw_rect(health_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9})
+		draw.draw_rect(health_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9}, flags = flags)
 
 		health_fill_width := (player.health / player.max_health) * bar_width
 		health_fill_rect := Rect{bar_x, health_bar_y, bar_x + health_fill_width, health_bar_y + bar_height}
-		draw.draw_rect(health_fill_rect, col = Vec4{1.0, 0.0, 0.0, 0.8})
+		draw.draw_rect(health_fill_rect, col = Vec4{1.0, 0.0, 0.0, 0.8}, flags = flags)
 
 		hunger_bg_rect := Rect{bar_x, hunger_bar_y, bar_x + bar_width, hunger_bar_y + bar_height}
-		draw.draw_rect(hunger_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9})
+		draw.draw_rect(hunger_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9}, flags = flags)
 
 		hunger_fill_width := (player.hunger / player.max_hunger) * bar_width
 		hunger_fill_rect := Rect{bar_x, hunger_bar_y, bar_x + hunger_fill_width, hunger_bar_y + bar_height}
-		draw.draw_rect(hunger_fill_rect, col = Vec4{0.8, 0.6, 0.0, 0.8})
+		draw.draw_rect(hunger_fill_rect, col = Vec4{0.8, 0.6, 0.0, 0.8}, flags = flags)
 
 		time_str := fmt.tprintf("Time: %.2f", ctx.gs.time_of_day)
 		time_x, time_y := screen_pivot(.top_right)

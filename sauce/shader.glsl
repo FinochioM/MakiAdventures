@@ -12,6 +12,8 @@ Here's the Holy Bible -> https://thebookofshaders.com/
 #define FLAG_background_pixels (1<<0)
 #define FLAG_2 (1<<1)
 #define FLAG_3 (1<<2)
+#define FLAG_light_source (1<<3)
+#define FLAG_ui_element (1<<4)
 bool has_flag(int flags, int flag) { return (flags & flag) != 0; }
 
 layout(binding=0) uniform Shader_Data {
@@ -46,9 +48,9 @@ void main() {
 
 	vec2 world_pixel = (ndc_to_world_xform * vec4(pos.xy, 0, 1)).xy;
 
-	vec3 lightning = vec3(0.0);
-
 	bool is_night = (time_of_day >= 0.5 || time_of_day < 0.1);
+
+	float darkness = 0.0;
 
 	vec4 tex_col = vec4(1.0);
 	if (tex_index == 0) {
@@ -72,19 +74,33 @@ void main() {
 
 	// add :pixel stuff here ^
 
-	if (is_night) {
-		for (int i = 0; i < light_count && i < 8; i++) {
-			float light_factor = calculate_light(world_pixel, light_positions[i], light_colors[i]);
-			lightning += light_colors[i].rgb * light_factor;
-		}
-
-		float ambient = 0.2;
-		lightning = max(lightning, vec3(ambient, ambient, ambient));
+	if (time_of_day < 0.1) {
+		darkness = 0.8 * (1.0 - time_of_day / 0.1);
+	} else if (time_of_day < 0.5) {
+		darkness = 0.0;
+	} else if (time_of_day < 0.6) {
+		darkness = 0.8 * ((time_of_day - 0.5) / 0.1);
 	} else {
-		lightning = vec3(1.0);
+		darkness = 0.8;
 	}
 
-	col_out.rgb *= lightning;
+	if (!has_flag(flags, FLAG_ui_element)) {
+		vec3 lightning = vec3(1.0);
+        if (darkness > 0.01) {
+            vec3 light_contribution = vec3(0.0);
+            for (int i = 0; i < light_count && i < 8; i++) {
+                float light_factor = calculate_light(world_pixel, light_positions[i], light_colors[i]);
+                light_contribution += light_colors[i].rgb * light_factor;
+            }
+
+            float ambient = 0.2;
+            vec3 night_light = max(light_contribution, vec3(ambient));
+
+            lightning = mix(vec3(1.0), night_light, darkness);
+        }
+
+		col_out.rgb *= lightning;
+	}
 
 	col_out *= color;
 
