@@ -5,9 +5,11 @@ innit
 
 --- v0.2
 health and food. DONE.
-dying.
-biomes or chunks.
+dying. (play death animation and re-run the game)
 day & night cycle.
 enemies.
+
+--- v0.3
+biomes or chunks.
 spawn trees randomly.
 break trees when punching.

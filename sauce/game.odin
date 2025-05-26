@@ -120,6 +120,12 @@ Entity :: struct {
 	time_since_last_hunger_damage: f32,
 	running_time: f32,
 
+	state: enum {
+		alive,
+		dying,
+		dead,
+	},
+
 	// this gets zeroed every frame. Useful for passing data to other systems.
 	scratch: struct {
 		col_override: Vec4,
@@ -319,6 +325,7 @@ setup_player :: proc(e: ^Entity) {
 	e.hunger = e.max_hunger
 	e.time_since_last_hunger_damage = 0.0
 	e.running_time = 0.0
+	e.state = .alive
 
 	// this offset is to take it from the bottom center of the aseprite document
 	// and center it at the feet
@@ -326,68 +333,100 @@ setup_player :: proc(e: ^Entity) {
 	e.draw_pivot = .bottom_center
 
 	e.update_proc = proc(e: ^Entity) {
-		input_dir := get_input_vector()
-		is_running := input_dir != {}
+		if e.state == .dying {
+			if e.anim_index > get_frame_count(.player_death) - 1 && end_time_up(e.next_frame_end_time) {
+				e.state = .dead
+				respawn_player(e)
+				return
+			}
 
-		e.pos += input_dir * 100.0 * ctx.delta_t
-
-		if input_dir.x != 0 {
-			e.last_known_x_dir = input_dir.x
+			return
 		}
 
-		e.flip_x = e.last_known_x_dir < 0
+		if e.state == .alive && e.health <= 0 {
+			e.state = .dying
+			entity_set_animation(e, .player_death, 0.2, looping = false)
+			// play sound here
+			return
+		}
 
-		if !is_running  {
-			entity_set_animation(e, .player_idle, 0.3)
-			e.running_time = 0.0 // reset when not running
-		} else {
-			entity_set_animation(e, .player_run, 0.1)
+		if e.state == .alive {
+			input_dir := get_input_vector()
+			is_running := input_dir != {}
 
-			e.running_time += ctx.delta_t
+			e.pos += input_dir * 100.0 * ctx.delta_t
 
-			if e.running_time > 1.0 {
-				e.hunger -= (ctx.delta_t / 30.0)
-				if e.hunger < 0.0 {
-					e.hunger = 0.0
+			if input_dir.x != 0 {
+				e.last_known_x_dir = input_dir.x
+			}
+
+			e.flip_x = e.last_known_x_dir < 0
+
+			if !is_running  {
+				entity_set_animation(e, .player_idle, 0.3)
+				e.running_time = 0.0 // reset when not running
+			} else {
+				entity_set_animation(e, .player_run, 0.1)
+
+				e.running_time += ctx.delta_t
+
+				if e.running_time > 1.0 {
+					e.hunger -= (ctx.delta_t / 30.0)
+					if e.hunger < 0.0 {
+						e.hunger = 0.0
+					}
 				}
 			}
-		}
 
-		if e.hunger <= 0.0 {
-			e.time_since_last_hunger_damage += ctx.delta_t
-			if e.time_since_last_hunger_damage >= 2.0 {
+			if e.hunger <= 0.0 {
+				e.time_since_last_hunger_damage += ctx.delta_t
+				if e.time_since_last_hunger_damage >= 2.0 {
+					e.health -= 1.0
+					e.time_since_last_hunger_damage = 0.0
+
+					e.hit_flash = Vec4{1, 0, 0, 0.5}
+				}
+			}
+
+			if input.key_pressed(.H) {
 				e.health -= 1.0
-				e.time_since_last_hunger_damage = 0.0
+				input.consume_key_pressed(.H)
 
 				e.hit_flash = Vec4{1, 0, 0, 0.5}
 			}
-		}
 
-		if input.key_pressed(.H) {
-			e.health -= 1.0
-			input.consume_key_pressed(.H)
-
-			e.hit_flash = Vec4{1, 0, 0, 0.5}
-		}
-
-		if e.health < 0.0 {
-			e.health = 0.0
-		}
-
-		if e.hit_flash.a > 0.0 {
-			e.hit_flash.a -= ctx.delta_t * 2.0
-			if e.hit_flash.a < 0.0 {
-				e.hit_flash.a = 0.0
+			if e.health < 0.0 {
+				e.health = 0.0
 			}
+
+			if e.hit_flash.a > 0.0 {
+				e.hit_flash.a -= ctx.delta_t * 2.0
+				if e.hit_flash.a < 0.0 {
+					e.hit_flash.a = 0.0
+				}
+			}
+
+			e.scratch.col_override = Vec4{0,0,1,0.2}
 		}
 
-		e.scratch.col_override = Vec4{0,0,1,0.2}
+		e.draw_proc = proc(e: Entity) {
+			draw.draw_sprite(e.pos, .shadow_medium, col={1,1,1,0.2})
+			draw_entity_default(e)
+		}
 	}
+}
 
-	e.draw_proc = proc(e: Entity) {
-		draw.draw_sprite(e.pos, .shadow_medium, col={1,1,1,0.2})
-		draw_entity_default(e)
-	}
+respawn_player :: proc(e: ^Entity) {
+	e.health = 20.0
+	e.hunger = 10.0
+
+	e.pos = Vec2{0, 0}
+
+	e.state = .alive
+
+	entity_set_animation(e, .player_idle, 0.3)
+
+	// play sound
 }
 
 setup_thing1 :: proc(using e: ^Entity) {

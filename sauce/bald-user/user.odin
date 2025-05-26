@@ -81,8 +81,10 @@ Sprite_Name :: enum {
 }
 
 sprite_data: [Sprite_Name]Sprite_Data = #partial {
+	// add for every new animation DO NOT FORGET.
 	.player_idle = {frame_count=2},
-	.player_run = {frame_count=3}
+	.player_run = {frame_count=3},
+	.player_death = {frame_count=3},
 }
 
 Sprite_Data :: struct {
