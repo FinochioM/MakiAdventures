@@ -74,7 +74,7 @@ void main() {
 
 	if (is_night) {
 		for (int i = 0; i < light_count && i < 8; i++) {
-			float light_factor = calculate_light(world_pixel, light_positions[i], light_colors[1]);
+			float light_factor = calculate_light(world_pixel, light_positions[i], light_colors[i]);
 			lightning += light_colors[i].rgb * light_factor;
 		}
 
@@ -84,7 +84,9 @@ void main() {
 		lightning = vec3(1.0);
 	}
 
-	col_out *= lightning;
+	col_out.rgb *= lightning;
+
+	col_out *= color;
 
 	col_out.rgb = mix(col_out.rgb, color_override.rgb, color_override.a);
 }

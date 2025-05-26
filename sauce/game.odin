@@ -228,7 +228,7 @@ game_update :: proc() {
 		torch.pos = Vec2{20,20}
 
 		ctx.gs.day_cycle_speed = 0.005 // 200 seconds
-		ctx.gs.time_of_day = 0.3
+		ctx.gs.time_of_day = 0.0
 	}
 
 	rebuild_scratch_helpers()
@@ -544,7 +544,7 @@ add_light :: proc(pos: Vec2, radius: f32, color: Vec4, intensity: f32, flicker: 
 		intensity = intensity,
 		active = true,
 		flicker = flicker,
-		flicker_speed = 10.0,
+		flicker_speed = 5.0,
 		flicker_amount = 0.2,
 	}
 
@@ -577,8 +577,8 @@ update_lights :: proc() {
 	}
 
 	for i := 0; i < ctx.gs.max_lights; i += 1 {
-		draw.draw_frame.light_positions[i] = {}
-		draw.draw_frame.light_colors[i] = {}
+		draw.draw_frame.shader_data.light_positions[i] = {}
+		draw.draw_frame.shader_data.light_colors[i] = {}
 	}
 
 	light_count := 0
@@ -586,14 +586,14 @@ update_lights :: proc() {
 		light := ctx.gs.lights[i]
 
 		if light.active {
-			draw.draw_frame.light_positions[light_count] = {light.pos.x, light.pos.y, 0, light.radius}
-			draw.draw_frame.light_colors[light_count] = light.color
+			draw.draw_frame.shader_data.light_positions[light_count] = {light.pos.x, light.pos.y, 0, light.radius}
+			draw.draw_frame.shader_data.light_colors[light_count] = light.color
 			light_count += 1
 		}
 	}
 
-	draw.draw_frame.light_count = i32(light_count)
-	draw.draw_frame.time_of_day = ctx.gs.time_of_day
+	draw.draw_frame.shader_data.light_count = i32(light_count)
+	draw.draw_frame.shader_data.time_of_day = ctx.gs.time_of_day
 }
 
 setup_torch :: proc(e: ^Entity) {
