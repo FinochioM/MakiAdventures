@@ -221,11 +221,12 @@ game_update :: proc() {
 	if ctx.gs.ticks == 0 {
 		init_lightning()
 
+		torch := entity_create(.torch)
+		torch.pos = Vec2{20,20}
+
 		player := entity_create(.player)
 		ctx.gs.player_handle = player.handle
 
-		torch := entity_create(.torch)
-		torch.pos = Vec2{20,20}
 
 		ctx.gs.day_cycle_speed = 0.005 // 200 seconds
 		ctx.gs.time_of_day = 0.0
@@ -601,7 +602,7 @@ setup_torch :: proc(e: ^Entity) {
 	e.sprite = .torch
 	e.draw_pivot = .bottom_center
 
-	light_radius := f32(150)
+	light_radius := f32(200)
 	light_color := Vec4{1.0, 0.7, 0.3, 0.8}
 
 	e.light_index = add_light(e.pos, light_radius, light_color, 0.8, flicker = true)
