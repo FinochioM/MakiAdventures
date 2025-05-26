@@ -288,7 +288,6 @@ rebuild_scratch_helpers :: proc() {
 }
 
 game_draw :: proc() {
-
 	// this is so we can get the current pixel in the shader in world space (VERYYY useful)
 	draw.draw_frame.ndc_to_world_xform = get_world_space_camera() * linalg.inverse(get_world_space_proj())
 	draw.draw_frame.bg_repeat_tex0_atlas_uv = draw.atlas_uv_from_sprite(.bg_repeat_tex0)
@@ -353,7 +352,7 @@ game_draw :: proc() {
 		time_x, time_y := screen_pivot(.top_right)
 		time_x -= 10
 		time_y -= 30
-		draw.draw_text({time_x, time_y}, time_str, z_layer = .ui, pivot = .top_right)
+		draw.draw_text({time_x, time_y}, time_str, z_layer = .ui, pivot = .top_right, flags = flags)
 	}
 }
 

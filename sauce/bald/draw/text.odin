@@ -14,16 +14,16 @@ draw_text_wrapped :: proc(pos: Vec2, text: string, wrap_width: f32, col:=color.W
 	return draw_text_no_drop_shadow(pos, text, col, scale, pivot, z_layer, col_override)
 }
 
-draw_text_with_drop_shadow :: proc(pos: Vec2, text: string, drop_shadow_col:=color.BLACK, col:=color.WHITE, scale:= 1.0, pivot:=utils.Pivot.bottom_left, z_layer:= user.ZLayer.nil, col_override:=Vec4{0,0,0,0}) -> Vec2 {
+draw_text_with_drop_shadow :: proc(pos: Vec2, text: string, drop_shadow_col:=color.BLACK, col:=color.WHITE, scale:= 1.0, pivot:=utils.Pivot.bottom_left, z_layer:= user.ZLayer.nil, col_override:=Vec4{0,0,0,0}, flags:= user.Quad_Flags(0)) -> Vec2 {
 
 	offset := Vec2{1,-1} * f32(scale)
-	draw_text_no_drop_shadow(pos+offset, text, col=drop_shadow_col*col,scale=scale,pivot=pivot,z_layer=z_layer,col_override=col_override)
-	dim := draw_text_no_drop_shadow(pos, text, col=col,scale=scale,pivot=pivot,z_layer=z_layer,col_override=col_override)
+	draw_text_no_drop_shadow(pos+offset, text, col=drop_shadow_col*col,scale=scale,pivot=pivot,z_layer=z_layer,col_override=col_override, flags = flags)
+	dim := draw_text_no_drop_shadow(pos, text, col=col,scale=scale,pivot=pivot,z_layer=z_layer,col_override=col_override, flags = flags)
 
 	return dim
 }
 
-draw_text_no_drop_shadow :: proc(pos: Vec2, text: string, col:=color.WHITE, scale:= 1.0, pivot:=utils.Pivot.bottom_left, z_layer:= user.ZLayer.nil, col_override:=Vec4{0,0,0,0}) -> (text_bounds: Vec2) {
+draw_text_no_drop_shadow :: proc(pos: Vec2, text: string, col:=color.WHITE, scale:= 1.0, pivot:=utils.Pivot.bottom_left, z_layer:= user.ZLayer.nil, col_override:=Vec4{0,0,0,0}, flags:=user.Quad_Flags(0)) -> (text_bounds: Vec2) {
 	using tt
 
 	push_z_layer(z_layer != .nil ? z_layer : draw_frame.active_z_layer)
@@ -59,7 +59,7 @@ draw_text_no_drop_shadow :: proc(pos: Vec2, text: string, col:=color.WHITE, scal
 
 	debug_text := false
 	if debug_text {
-		draw_rect(shape.rect_make(pos + pivot_offset, total_size), col=color.BLACK)
+		draw_rect(shape.rect_make(pos + pivot_offset, total_size), col=color.BLACK, flags = flags)
 	}
 
 	// draw glyphs one by one
@@ -96,10 +96,10 @@ draw_text_no_drop_shadow :: proc(pos: Vec2, text: string, col:=color.WHITE, scal
 		xform *= utils.xform_translate(offset_to_render_at)
 
 		if debug_text {
-			draw_rect_xform(xform, size, col=Vec4{1,1,1,0.8})
+			draw_rect_xform(xform, size, col=Vec4{1,1,1,0.8}, flags = flags)
 		}
 
-		draw_rect_xform(xform, size, uv=uv, tex_index=1, col_override=col_override, col=col)
+		draw_rect_xform(xform, size, uv=uv, tex_index=1, col_override=col_override, col=col, flags = flags)
 
 		x += advance_x
 		y += -advance_y
