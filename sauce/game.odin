@@ -59,6 +59,9 @@ Game_State :: struct {
 	// sloppy state dump
 	player_handle: Entity_Handle,
 
+	time_of_day: f32, // 0.0 -> 1.0 (0.0 night, 1.0 day)
+	day_cycle_speed: f32, // how fast time passes
+
 	scratch: struct {
 		all_entities: []Entity_Handle,
 	}
@@ -200,6 +203,9 @@ game_update :: proc() {
 	if ctx.gs.ticks == 0 {
 		player := entity_create(.player)
 		ctx.gs.player_handle = player.handle
+
+		ctx.gs.day_cycle_speed = 0.005 // 200 seconds
+		ctx.gs.time_of_day = 0.3
 	}
 
 	rebuild_scratch_helpers()
@@ -226,6 +232,22 @@ game_update :: proc() {
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
 
 	// ... add whatever other systems you need here to make epic game
+
+	// day & night
+	ctx.gs.time_of_day += ctx.delta_t * ctx.gs.day_cycle_speed
+	if ctx.gs.time_of_day >= 1.0 {
+		ctx.gs.time_of_day -= 1.0
+	}
+
+	// TESTING DAY AND NIGHT
+	if input.key_pressed(.L) {
+		ctx.gs.day_cycle_speed *= 0.5
+		input.consume_key_pressed(.L)
+	}
+	if input.key_pressed(.J) {
+		ctx.gs.day_cycle_speed *= 2.0
+		input.consume_key_pressed(.J)
+	}
 }
 
 rebuild_scratch_helpers :: proc() {
@@ -269,6 +291,24 @@ game_draw :: proc() {
 		}
 	}
 
+	// night overlay
+	{
+		draw.push_coord_space({proj = Matrix4(1), camera = Matrix4(1)})
+
+		darkness := 0.0
+
+		if ctx.gs.time_of_day < 0.25 {
+			darkness = 0.7 * auto_cast (1.0 - ctx.gs.time_of_day / 0.25)
+		} else if ctx.gs.time_of_day < 0.75 {
+			darkness = 0.0
+		} else {
+			darkness = 0.7 * auto_cast((ctx.gs.time_of_day - 0.75) / 0.25)
+		}
+
+		night_color := Vec4{0.05, 0.05,0.2, auto_cast darkness}
+		draw.draw_rect(Rect{-1, -1, 1, 1}, col = night_color, z_layer = .vfx)
+	}
+
 	// ui?
 	{
 		draw.push_coord_space(get_screen_space())
@@ -298,6 +338,12 @@ game_draw :: proc() {
 		hunger_fill_width := (player.hunger / player.max_hunger) * bar_width
 		hunger_fill_rect := Rect{bar_x, hunger_bar_y, bar_x + hunger_fill_width, hunger_bar_y + bar_height}
 		draw.draw_rect(hunger_fill_rect, col = Vec4{0.8, 0.6, 0.0, 0.8})
+
+		time_str := fmt.tprintf("Time: %.2f", ctx.gs.time_of_day)
+		time_x, time_y := screen_pivot(.top_right)
+		time_x -= 10
+		time_y -= 30
+		draw.draw_text({time_x, time_y}, time_str, z_layer = .ui, pivot = .top_right)
 	}
 }
 
@@ -473,3 +519,4 @@ update_entity_animation :: proc(e: ^Entity) {
 		}
 	}
 }
+

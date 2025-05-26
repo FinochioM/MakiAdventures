@@ -8,8 +8,10 @@ health and food. DONE.
 dying. (play death animation and re-run the game) DONE.
 day & night cycle.
 enemies.
+killing enemies.
 
 --- v0.3
+inventory.
 biomes or chunks.
 spawn trees randomly.
 break trees when punching.
