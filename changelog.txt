@@ -5,7 +5,7 @@ innit
 
 --- v0.2
 health and food. DONE.
-dying. (play death animation and re-run the game)
+dying. (play death animation and re-run the game) DONE.
 day & night cycle.
 enemies.
 
