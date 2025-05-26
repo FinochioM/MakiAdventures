@@ -74,7 +74,7 @@ render_init :: proc() {
 		usage = .DYNAMIC,
 		size = size_of(actual_quad_data),
 	})
-	
+
 	// make & fill the index buffer
 	index_buffer_count :: MAX_QUADS*6
 	indices,_ := mem.make([]u16, index_buffer_count, allocator=context.allocator)
@@ -94,10 +94,10 @@ render_init :: proc() {
 		type = .INDEXBUFFER,
 		data = { ptr = raw_data(indices), size = size_of(u16) * index_buffer_count },
 	})
-	
+
 	// image stuff
 	render_state.bind.samplers[SMP_default_sampler] = sg.make_sampler({})
-	
+
 	// setup pipeline
 	// :vertex layout
 	pipeline_desc : sg.Pipeline_Desc = {
@@ -129,7 +129,7 @@ render_init :: proc() {
 	render_state.pip = sg.make_pipeline(pipeline_desc)
 
 	clear_col = utils.hex_to_rgba(0x090a14ff)
-	
+
 	// default pass action
 	render_state.pass_action = {
 		colors = {
@@ -157,7 +157,7 @@ core_render_frame_end :: proc() {
 			offset += size
 		}
 	}
-	
+
 	render_state.bind.images[IMG_tex0] = atlas.sg_image
 	render_state.bind.images[IMG_font_tex] = font.sg_image
 
@@ -212,27 +212,27 @@ sprites: [user.Sprite_Name]Sprite
 
 load_sprites_into_atlas :: proc() {
 	img_dir := "res/images/"
-	
+
 	for img_name in user.Sprite_Name {
 		if img_name == .nil do continue
-		
+
 		path := fmt.tprint(img_dir, img_name, ".png", sep="")
 		png_data, succ := os.read_entire_file(path)
 		assert(succ, fmt.tprint(path, "not found"))
-		
+
 		stbi.set_flip_vertically_on_load(1)
 		width, height, channels: i32
 		img_data := stbi.load_from_memory(raw_data(png_data), auto_cast len(png_data), &width, &height, &channels, 4)
 		assert(img_data != nil, "stbi load failed, invalid image?")
-			
+
 		img : Sprite;
 		img.width = width
 		img.height = height
 		img.data = img_data
-		
+
 		sprites[img_name] = img
 	}
-	
+
 	// pack sprites into atlas
 	{
 		using stbrp
@@ -241,11 +241,11 @@ load_sprites_into_atlas :: proc() {
 		LENGTH :: 1024
 		atlas.w = LENGTH
 		atlas.h = LENGTH
-		
+
 		cont : stbrp.Context
 		nodes : [LENGTH]stbrp.Node
 		stbrp.init_target(&cont, auto_cast atlas.w, auto_cast atlas.h, &nodes[0], auto_cast atlas.w)
-		
+
 		rects : [dynamic]stbrp.Rect
 		rects.allocator = context.temp_allocator
 		for img, id in sprites {
@@ -254,31 +254,31 @@ load_sprites_into_atlas :: proc() {
 			}
 			append(&rects, stbrp.Rect{ id=auto_cast id, w=Coord(img.width+2), h=Coord(img.height+2) })
 		}
-		
+
 		succ := stbrp.pack_rects(&cont, &rects[0], auto_cast len(rects))
 		if succ == 0 {
 			assert(false, "failed to pack all the rects, ran out of space?")
 		}
-		
+
 		// allocate big atlas
 		raw_data, err := mem.alloc(atlas.w * atlas.h * 4, allocator=context.temp_allocator)
 		assert(err == .None)
 		//mem.set(raw_data, 255, atlas.w*atlas.h*4)
-		
+
 		// copy rect row-by-row into destination atlas
 		for rect in rects {
 			img := &sprites[user.Sprite_Name(rect.id)]
-			
+
 			rect_w := int(rect.w) - 2
 			rect_h := int(rect.h) - 2
-			
+
 			// copy row by row into atlas
 			for row in 0..<rect_h {
 				src_row := mem.ptr_offset(&img.data[0], int(row) * rect_w * 4)
 				dest_row := mem.ptr_offset(cast(^u8)raw_data, ((int(rect.y+1) + row) * int(atlas.w) + int(rect.x+1)) * 4)
 				mem.copy(dest_row, src_row, rect_w * 4)
 			}
-			
+
 			// yeet old data
 			stbi.image_free(img.data)
 			img.data = nil;
@@ -288,11 +288,11 @@ load_sprites_into_atlas :: proc() {
 			img.atlas_uvs.z = img.atlas_uvs.x + cast(f32)img.width / (cast(f32)atlas.w)
 			img.atlas_uvs.w = img.atlas_uvs.y + cast(f32)img.height / (cast(f32)atlas.h)
 		}
-		
+
 		when ODIN_OS == .Windows {
 		stbi.write_png("atlas.png", auto_cast atlas.w, auto_cast atlas.h, 4, raw_data, 4 * auto_cast atlas.w)
 		}
-		
+
 		// setup image for GPU
 		desc : sg.Image_Desc
 		desc.width = auto_cast atlas.w
@@ -326,20 +326,20 @@ font: Font
 // that'll probs change when we do localisation stuff. But that's farrrrr away. No need to complicate things now.
 load_font :: proc() {
 	using tt
-	
+
 	bitmap, _ := mem.alloc(font_bitmap_w * font_bitmap_h)
 	font_height := 15 // for some reason this only bakes properly at 15 ? it's a 16px font dou...
 	path := "res/fonts/alagard.ttf" // #user
 	ttf_data, err := os.read_entire_file(path)
 	assert(ttf_data != nil, "failed to read font")
-	
+
 	ret := BakeFontBitmap(raw_data(ttf_data), 0, auto_cast font_height, auto_cast bitmap, font_bitmap_w, font_bitmap_h, 32, char_count, &font.char_data[0])
 	assert(ret > 0, "not enough space in bitmap")
-	
+
 	when ODIN_OS == .Windows {
 		//stbi.write_png("font.png", auto_cast font_bitmap_w, auto_cast font_bitmap_h, 1, bitmap, auto_cast font_bitmap_w)
 	}
-	
+
 	// setup sg image so we can use it in the shader
 	desc : sg.Image_Desc
 	desc.width = auto_cast font_bitmap_w
@@ -389,7 +389,7 @@ push_z_layer :: proc(zlayer: user.ZLayer) -> user.ZLayer {
 
 
 draw_quad_projected :: proc(
-	world_to_clip:   Matrix4, 
+	world_to_clip:   Matrix4,
 
 	// for each corner of the quad
 	positions:       [4]Vec2,
@@ -426,10 +426,10 @@ draw_quad_projected :: proc(
 			assert(z_layer_queue < len(quad_array), "no elements pushed after the z_layer_queue")
 
 			// I'm just kinda praying that this works lol, seems good
-			
+
 			// This is an array insert example
 			resize_dynamic_array(quad_array, len(quad_array)+1)
-			
+
 			og_range := quad_array[z_layer_queue:len(quad_array)-1]
 			new_range := quad_array[z_layer_queue+1:len(quad_array)]
 			copy(new_range, og_range)
@@ -438,12 +438,12 @@ draw_quad_projected :: proc(
 		}
 
 	}
-	
+
 	verts[0].pos = (world_to_clip * Vec4{positions[0].x, positions[0].y, 0.0, 1.0}).xy
 	verts[1].pos = (world_to_clip * Vec4{positions[1].x, positions[1].y, 0.0, 1.0}).xy
 	verts[2].pos = (world_to_clip * Vec4{positions[2].x, positions[2].y, 0.0, 1.0}).xy
 	verts[3].pos = (world_to_clip * Vec4{positions[3].x, positions[3].y, 0.0, 1.0}).xy
-	
+
 	verts[0].col = colors[0]
 	verts[1].col = colors[1]
 	verts[2].col = colors[2]
@@ -453,7 +453,7 @@ draw_quad_projected :: proc(
 	verts[1].uv = uvs[1]
 	verts[2].uv = uvs[2]
 	verts[3].uv = uvs[3]
-	
+
 	verts[0].local_uv = {0, 0}
 	verts[1].local_uv = {0, 1}
 	verts[2].local_uv = {1, 1}
@@ -463,28 +463,28 @@ draw_quad_projected :: proc(
 	verts[1].tex_index = tex_index
 	verts[2].tex_index = tex_index
 	verts[3].tex_index = tex_index
-	
+
 	verts[0].size = sprite_size
 	verts[1].size = sprite_size
 	verts[2].size = sprite_size
 	verts[3].size = sprite_size
-	
+
 	verts[0].col_override = col_override
 	verts[1].col_override = col_override
 	verts[2].col_override = col_override
 	verts[3].col_override = col_override
-	
+
 	verts[0].z_layer = u8(z_layer0)
 	verts[1].z_layer = u8(z_layer0)
 	verts[2].z_layer = u8(z_layer0)
 	verts[3].z_layer = u8(z_layer0)
-	
-	flags0 := flags | draw_frame.active_flags	
+
+	flags0 := flags | draw_frame.active_flags
 	verts[0].quad_flags = flags0
 	verts[1].quad_flags = flags0
 	verts[2].quad_flags = flags0
 	verts[3].quad_flags = flags0
-	
+
 	verts[0].params = params
 	verts[1].params = params
 	verts[2].params = params

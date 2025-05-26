@@ -62,6 +62,9 @@ Game_State :: struct {
 	time_of_day: f32, // 0.0 -> 1.0 (0.0 night, 1.0 day)
 	day_cycle_speed: f32, // how fast time passes
 
+	lights: [dynamic]Light_Source,
+	max_lights: int,
+
 	scratch: struct {
 		all_entities: []Entity_Handle,
 	}
@@ -88,6 +91,17 @@ Input_Action :: enum u8 {
 	click,
 	use,
 	interact,
+}
+
+Light_Source :: struct {
+	pos: Vec2,
+	radius: f32,
+	intensity: f32,
+	color: Vec4,
+	active: bool,
+	flicker: bool,
+	flicker_speed: f32,
+	flicker_amount: f32,
 }
 
 //
@@ -123,6 +137,8 @@ Entity :: struct {
 	time_since_last_hunger_damage: f32,
 	running_time: f32,
 
+	light_index: int,
+
 	state: enum {
 		alive,
 		dying,
@@ -139,6 +155,7 @@ Entity_Kind :: enum {
 	nil,
 	player,
 	thing1,
+	torch,
 }
 
 entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
@@ -150,6 +167,7 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 		case .nil:
 		case .player: setup_player(e)
 		case .thing1: setup_thing1(e)
+		case .torch:  setup_torch(e)
 	}
 }
 
@@ -201,8 +219,13 @@ game_update :: proc() {
 
 	// setup world for first game tick
 	if ctx.gs.ticks == 0 {
+		init_lightning()
+
 		player := entity_create(.player)
 		ctx.gs.player_handle = player.handle
+
+		torch := entity_create(.torch)
+		torch.pos = Vec2{20,20}
 
 		ctx.gs.day_cycle_speed = 0.005 // 200 seconds
 		ctx.gs.time_of_day = 0.3
@@ -238,6 +261,8 @@ game_update :: proc() {
 	if ctx.gs.time_of_day >= 1.0 {
 		ctx.gs.time_of_day -= 1.0
 	}
+
+	update_lights()
 
 	// TESTING DAY AND NIGHT
 	if input.key_pressed(.L) {
@@ -289,26 +314,6 @@ game_draw :: proc() {
 			e := entity_from_handle(handle)
 			e.draw_proc(e^)
 		}
-	}
-
-	// night overlay
-	{
-		draw.push_coord_space({proj = Matrix4(1), camera = Matrix4(1)})
-
-		darkness := 0.0
-
-		if ctx.gs.time_of_day < 0.1 {
-			darkness = 0.7 * auto_cast (1.0 - ctx.gs.time_of_day / 0.1)
-		} else if ctx.gs.time_of_day < 0.5 {
-			darkness = 0.0
-		} else if ctx.gs.time_of_day < 0.6 {
-			darkness = 0.7 * auto_cast ((ctx.gs.time_of_day - 0.5) / 0.1)
-		} else {
-			darkness = 0.7
-		}
-
-		night_color := Vec4{0.05, 0.05,0.2, auto_cast darkness}
-		draw.draw_rect(Rect{-1, -1, 1, 1}, col = night_color, z_layer = .vfx)
 	}
 
 	// ui?
@@ -522,3 +527,90 @@ update_entity_animation :: proc(e: ^Entity) {
 	}
 }
 
+init_lightning :: proc() {
+	ctx.gs.max_lights = 8
+	ctx.gs.lights = make([dynamic]Light_Source, 0, ctx.gs.max_lights)
+}
+
+add_light :: proc(pos: Vec2, radius: f32, color: Vec4, intensity: f32, flicker: bool = false) -> int {
+	if len(ctx.gs.lights) >= ctx.gs.max_lights {
+		return -1
+	}
+
+	light := Light_Source {
+		pos = pos,
+		radius = radius,
+		color = color,
+		intensity = intensity,
+		active = true,
+		flicker = flicker,
+		flicker_speed = 10.0,
+		flicker_amount = 0.2,
+	}
+
+	append(&ctx.gs.lights, light)
+	return len(ctx.gs.lights) - 1
+}
+
+update_light_position :: proc(index: int, pos: Vec2) {
+	if index >= 0 && index < len(ctx.gs.lights) {
+		ctx.gs.lights[index].pos = pos
+	}
+}
+
+set_light_active :: proc(index: int, active: bool) {
+	if index >= 0 && index < len(ctx.gs.lights) {
+		ctx.gs.lights[index].active = active
+	}
+}
+
+update_lights :: proc() {
+	for i := 0; i < len(ctx.gs.lights); i += 1 {
+		light := &ctx.gs.lights[i]
+
+		if light.flicker && light.active {
+			flicker_value := math.sin(f32(app_now()) * light.flicker_speed) * light.flicker_amount
+			light.color.a = light.intensity * (1.0 + flicker_value)
+		} else {
+			light.color.a = light.intensity
+		}
+	}
+
+	for i := 0; i < ctx.gs.max_lights; i += 1 {
+		draw.draw_frame.light_positions[i] = {}
+		draw.draw_frame.light_colors[i] = {}
+	}
+
+	light_count := 0
+	for i := 0; i < len(ctx.gs.lights); i += 1 {
+		light := ctx.gs.lights[i]
+
+		if light.active {
+			draw.draw_frame.light_positions[light_count] = {light.pos.x, light.pos.y, 0, light.radius}
+			draw.draw_frame.light_colors[light_count] = light.color
+			light_count += 1
+		}
+	}
+
+	draw.draw_frame.light_count = i32(light_count)
+	draw.draw_frame.time_of_day = ctx.gs.time_of_day
+}
+
+setup_torch :: proc(e: ^Entity) {
+	e.kind = .torch
+	e.sprite = .torch
+	e.draw_pivot = .bottom_center
+
+	light_radius := f32(150)
+	light_color := Vec4{1.0, 0.7, 0.3, 0.8}
+
+	e.light_index = add_light(e.pos, light_radius, light_color, 0.8, flicker = true)
+
+	e.update_proc = proc(e: ^Entity) {
+		is_night := ctx.gs.time_of_day >= 0.5 || ctx.gs.time_of_day < 0.1
+
+		set_light_active(e.light_index, is_night)
+
+		update_light_position(e.light_index, e.pos)
+	}
+}

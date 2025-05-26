@@ -46,6 +46,7 @@ Quad_Flags :: enum u8 {
 	background_pixels = (1<<0),
 	flag2 = (1<<1),
 	flag3 = (1<<2),
+	ligth_source = (1<<3), // flag for light sources
 }
 
 ZLayer :: enum u8 {
@@ -73,6 +74,7 @@ Sprite_Name :: enum {
 	player_death,
 	player_run,
 	player_idle,
+	torch,
 	// to add new sprites, just put the .png in the res/images folder
 	// and add the name to the enum here
 	//

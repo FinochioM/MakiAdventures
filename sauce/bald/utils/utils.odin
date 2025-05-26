@@ -107,13 +107,13 @@ fire :: proc(cmd: ..string) -> os2.Error {
 		stderr = os2.stderr,
 	})
 	if start_err != nil {
-		fmt.eprintln("Error:", start_err) 
+		fmt.eprintln("Error:", start_err)
 		return start_err
 	}
 
 	_, wait_err := os2.process_wait(process)
 	if wait_err != nil {
-		fmt.eprintln("Error:", wait_err) 
+		fmt.eprintln("Error:", wait_err)
 		return wait_err
 	}
 
@@ -294,7 +294,7 @@ pretty_calendar_time :: proc(t: time.Time) -> string {
 	_time_to_string_hms :: proc(t: time.Time, buf: []u8) -> (res: string) #no_bounds_check {
 		assert(len(buf) >= time.MIN_HMS_LEN)
 		h, m, s := time.clock(t)
-	
+
 		buf[7] = '0' + u8(s % 10); s /= 10
 		buf[6] = '0' + u8(s)
 		buf[5] = '-'
@@ -303,16 +303,16 @@ pretty_calendar_time :: proc(t: time.Time) -> string {
 		buf[2] = '-'
 		buf[1] = '0' + u8(h % 10); h /= 10
 		buf[0] = '0' + u8(h)
-	
+
 		return string(buf[:time.MIN_HMS_LEN])
 	}
 
 	buf: [time.MIN_YYYY_DATE_LEN]u8
 	ymd := time.to_string_yyyy_mm_dd(t, buf[:])
-	
+
 	buf2: [time.MIN_HMS_LEN]u8
 	clock := _time_to_string_hms(t, buf2[:])
-	
+
 	return fmt.tprintf("%v_%v", ymd, clock)
 }
 
@@ -323,10 +323,10 @@ pretty_calendar_time :: proc(t: time.Time) -> string {
 time_to_iso :: proc(t: time.Time) -> string {
 	buf: [time.MIN_YYYY_DATE_LEN]u8
 	ymd := time.to_string_yyyy_mm_dd(t, buf[:])
-	
+
 	buf2: [time.MIN_HMS_LEN]u8
 	clock := time.time_to_string_hms(t, buf2[:])
-	
+
 	return fmt.tprintf("%vT%vZ", ymd, clock)
 }
 

@@ -77,10 +77,10 @@ draw_sprite :: proc(
 	rect_size.x /= f32(frame_count)
 
 	/* this was the old one
-	
+
 	// todo, incorporate this via sprite data
 	offset, pivot := get_sprite_offset(img_id)
-	
+
 	xform0 := Matrix4(1)
 	xform0 *= xform_translate(pos)
 	xform0 *= xform // we slide in here because rotations + scales work nicely at this point
@@ -151,9 +151,9 @@ draw_rect :: proc(
 
 draw_sprite_in_rect :: proc(sprite: user.Sprite_Name, pos: Vec2, size: Vec2, xform := Matrix4(1), col := color.WHITE, col_override:= Vec4{0,0,0,0}, z_layer:=user.ZLayer.nil, flags:=user.Quad_Flags(0), pad_pct :f32= 0.1) {
 	img_size := get_sprite_size(sprite)
-	
+
 	rect := shape.rect_make(pos, size)
-	
+
 	// make it smoller (padding)
 	{
 		rect = shape.rect_shift(rect, -rect.xy)
@@ -161,7 +161,7 @@ draw_sprite_in_rect :: proc(sprite: user.Sprite_Name, pos: Vec2, size: Vec2, xfo
 		rect.zw -= size * pad_pct * 0.5
 		rect = shape.rect_shift(rect, pos)
 	}
-	
+
 	// this shrinks the rect if the sprite is too smol
 	{
 		rect_size := shape.rect_size(rect)
@@ -169,13 +169,13 @@ draw_sprite_in_rect :: proc(sprite: user.Sprite_Name, pos: Vec2, size: Vec2, xfo
 		if size_diff_x < 0 {
 			size_diff_x = 0
 		}
-		
+
 		size_diff_y := rect_size.y - img_size.y
 		if size_diff_y < 0 {
 			size_diff_y = 0
 		}
 		size_diff := Vec2{size_diff_x, size_diff_y}
-		
+
 		offset := rect.xy
 		rect = shape.rect_shift(rect, -rect.xy)
 		rect.xy += size_diff * 0.5
@@ -184,7 +184,7 @@ draw_sprite_in_rect :: proc(sprite: user.Sprite_Name, pos: Vec2, size: Vec2, xfo
 	}
 
 	// TODO, there's a buggie wuggie in here somewhere...
-	
+
 	// ratio render lock
 	if img_size.x > img_size.y { // long boi
 		rect_size := shape.rect_size(rect)
@@ -199,14 +199,14 @@ draw_sprite_in_rect :: proc(sprite: user.Sprite_Name, pos: Vec2, size: Vec2, xfo
 		new_width := rect.z - rect.x
 		rect = shape.rect_shift(rect, Vec2{0, (rect_size.x - new_width) * 0.5})
 	}
-	
+
 	draw_rect(rect, col=col, sprite=sprite, col_override=col_override, z_layer=z_layer, flags=flags)
 }
 
 draw_rect_xform :: proc(
 	xform: Matrix4,
 	size: Vec2,
-	
+
 	// defaults to no sprite (blank color)
 	sprite:= user.Sprite_Name.nil,
 
@@ -216,7 +216,7 @@ draw_rect_xform :: proc(
 	// by default this'll be the main texture atlas
 	// can override though and use something else (like for the fonts)
 	tex_index:u8=0,
-	
+
 	// same as above
 	anim_index:=0,
 	col:=color.WHITE,
@@ -273,18 +273,18 @@ draw_rect_xform :: proc(
 			utils.crash_when_debug("todo")
 		}
 		if crop_bottom != 0.0 {
-		
+
 			crop := size.y * (1.0-crop_bottom)
 			diff :f32= crop - size.y
 			size.y = crop
 			uv_size := shape.rect_size(uv)
-			
+
 			uv.y += uv_size.y * crop_bottom
 			local_to_clip_space *= utils.xform_translate(Vec2{0, -diff})
 		}
 		if crop_right != 0.0 {
 			size.x *= 1.0-crop_right
-			
+
 			uv_size := shape.rect_size(uv)
 			uv.z -= uv_size.x * crop_right
 		}

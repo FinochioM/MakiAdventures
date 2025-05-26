@@ -49,14 +49,14 @@ rect_scale_v2 :: proc(_rect: Rect, scale: Vector2) -> Rect {
 	rect := _rect
 	origin := rect.xy
 	rect = rect_shift(rect, -origin)
-	
+
 	// Calculate scale amount for each axis separately
 	scale_amount := (rect.zw * scale) - rect.zw
-	
+
 	// Adjust rectangle while maintaining center position
 	rect.xy -= scale_amount / 2
 	rect.zw += scale_amount / 2
-	
+
 	rect = rect_shift(rect, origin)
 	return rect
 }
