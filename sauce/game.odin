@@ -159,6 +159,11 @@ Entity :: struct {
 	last_damage_time: f64,
 	damage_cooldown: f32,
 
+	// player attack
+	attack_damage: f32,
+	attack_cooldown: f32,
+	last_attack_time: f64,
+
 	// this gets zeroed every frame. Useful for passing data to other systems.
 	scratch: struct {
 		col_override: Vec4,
@@ -244,8 +249,8 @@ game_update :: proc() {
 		player := entity_create(.player)
 		ctx.gs.player_handle = player.handle
 
-		ctx.gs.day_cycle_speed = 0.05 // 200 seconds -> 0.005
-		ctx.gs.time_of_day = 0.1
+		ctx.gs.day_cycle_speed = 0.0 // 200 seconds -> 0.005
+		ctx.gs.time_of_day = 0.0
 
 		ctx.gs.enemy_spawn_interval = 3.0
 		ctx.gs.enemy_spawn_timer = 0.0
@@ -265,14 +270,6 @@ game_update :: proc() {
 		if e.update_proc != nil {
 			e.update_proc(e)
 		}
-	}
-
-	if input.key_pressed(.LEFT_MOUSE) {
-		input.consume_key_pressed(.LEFT_MOUSE)
-
-		pos := mouse_pos_in_current_space()
-		log.info("schloop at", pos)
-		sound.play("event:/schloop", pos=pos)
 	}
 
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
@@ -418,6 +415,10 @@ setup_player :: proc(e: ^Entity) {
 	e.running_time = 0.0
 	e.state = .alive
 
+	e.attack_damage = 1.0
+	e.attack_cooldown = 0.5
+	e.last_attack_time = 0.0
+
 	// this offset is to take it from the bottom center of the aseprite document
 	// and center it at the feet
 	e.draw_offset = Vec2{0.5, 5}
@@ -476,6 +477,14 @@ setup_player :: proc(e: ^Entity) {
 					e.time_since_last_hunger_damage = 0.0
 
 					e.hit_flash = Vec4{1, 0, 0, 0.5}
+				}
+			}
+
+			if is_action_pressed(.click) {
+				current_time := now()
+				if current_time - e.last_attack_time >= f64(e.attack_cooldown) {
+					player_attack(e)
+					e.last_attack_time = current_time
 				}
 			}
 
@@ -779,4 +788,33 @@ spawn_enemy :: proc() {
 
 	enemy := entity_create(.enemy)
 	enemy.pos = get_spawn_position_offscreen()
+}
+
+player_attack :: proc(player: ^Entity) {
+    mouse_pos := mouse_pos_in_current_space()
+
+    attack_size := Vec2{20.0, 20.0}
+    attack_rect := shape.rect_make(mouse_pos - attack_size / 2, attack_size, utils.Pivot.center_center)
+
+    for handle in get_all_ents() {
+        e := entity_from_handle(handle)
+
+        if e.kind != .enemy || e.health <= 0 {
+            continue
+        }
+
+        enemy_circle := shape.Circle{
+            pos = e.pos,
+            radius = 16.0,
+        }
+
+        if colliding, _ := shape.collide(attack_rect, enemy_circle); colliding {
+            e.health -= player.attack_damage
+            e.hit_flash = Vec4{1, 0.5, 0, 0.8}
+
+            // play attack sound
+
+            break
+        }
+    }
 }
