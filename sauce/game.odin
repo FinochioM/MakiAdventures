@@ -310,15 +310,30 @@ game_update :: proc() {
 
 	rebuild_scratch_helpers()
 
+	ENTITY_UPDATE_DISTANCE :: 300.0
+	player_pos := get_player().pos
+
 	// big :update time
 	for handle in get_all_ents() {
-		e := entity_from_handle(handle)
+	    e := entity_from_handle(handle)
 
-		update_entity_animation(e)
+		// update the "important" entities.
+	    if e.kind == .player || e.kind == .torch {
+	        update_entity_animation(e)
+	        if e.update_proc != nil {
+	            e.update_proc(e)
+	        }
+	        continue
+	    }
 
-		if e.update_proc != nil {
-			e.update_proc(e)
-		}
+		// "freeze" the not so important ones.
+	    distance_to_player := linalg.length(e.pos - player_pos)
+	    if distance_to_player <= ENTITY_UPDATE_DISTANCE {
+	        update_entity_animation(e)
+	        if e.update_proc != nil {
+	            e.update_proc(e)
+	        }
+	    }
 	}
 
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
@@ -511,7 +526,9 @@ setup_player :: proc(e: ^Entity) {
 	e.draw_offset = Vec2{0.5, 5}
 	e.draw_pivot = .bottom_center
 
+
 	e.update_proc = proc(e: ^Entity) {
+		player_speed:f32 = 110.0
 		if e.state == .dying {
 			if e.anim_index > get_frame_count(.player_death) - 1 && end_time_up(e.next_frame_end_time) {
 				e.state = .dead
@@ -533,7 +550,7 @@ setup_player :: proc(e: ^Entity) {
 			input_dir := get_input_vector()
 			is_running := input_dir != {}
 
-			e.pos += input_dir * 1000.0 * ctx.delta_t
+			e.pos += input_dir * player_speed * ctx.delta_t
 
 			if input_dir.x != 0 {
 				e.last_known_x_dir = input_dir.x
@@ -994,7 +1011,7 @@ generate_world :: proc() {
 }
 
 place_world_resources :: proc() {
-    ctx.gs.resource_spawn_distance = 200.0
+    ctx.gs.resource_spawn_distance = 400.0
     ctx.gs.resource_despawn_distance = 400.0
 
     tree_count := 0
