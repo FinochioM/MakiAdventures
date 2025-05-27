@@ -10,7 +10,7 @@ It adds too much friction.
 
 */
 
-MAX_ENTITIES :: 2048 // increase this as needed.
+MAX_ENTITIES :: 100000 // increase this as needed.
 
 import "base:runtime"
 import "core:log"

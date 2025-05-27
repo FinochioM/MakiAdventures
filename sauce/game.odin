@@ -78,6 +78,10 @@ Game_State :: struct {
 	moisture_seed: i64,
 	fertility_seed: i64,
 
+	resource_locations: [dynamic]Resource_Location,
+	resource_spawn_distance: f32,
+	resource_despawn_distance: f32,
+
 	scratch: struct {
 		all_entities: []Entity_Handle,
 	}
@@ -321,6 +325,8 @@ game_update :: proc() {
 
 	//constrain_camera_to_world_bounds()
 
+	update_dynamic_resources()
+
 	// ... add whatever other systems you need here to make epic game
 
 	// day & night
@@ -446,6 +452,23 @@ game_draw :: proc() {
 		time_x -= 10
 		time_y -= 30
 		draw.draw_text({time_x, time_y}, time_str, z_layer = .ui, pivot = .top_right, flags = flags)
+
+		current_biome_str := "Unknown"
+		if tile := get_tile_at_pos(player.pos); tile != nil {
+			#partial switch tile.biome {
+				case .grassland: current_biome_str = "Grassland"
+				case .forest: current_biome_str = "Forest"
+				case .desert: current_biome_str = "Desert"
+				case .swamp: current_biome_str = "Swamp"
+				case .rocky: current_biome_str = "Rocky"
+			}
+		}
+
+		biome_str := fmt.tprintf("Biome: %s", current_biome_str)
+		biome_x, biome_y := screen_pivot(.top_right)
+		biome_x -= 10
+		biome_y -= 50
+		draw.draw_text({biome_x, biome_y}, biome_str, z_layer = .ui, pivot = .top_right, flags = flags)
 	}
 }
 
@@ -510,7 +533,7 @@ setup_player :: proc(e: ^Entity) {
 			input_dir := get_input_vector()
 			is_running := input_dir != {}
 
-			e.pos += input_dir * 100.0 * ctx.delta_t
+			e.pos += input_dir * 1000.0 * ctx.delta_t
 
 			if input_dir.x != 0 {
 				e.last_known_x_dir = input_dir.x
@@ -971,6 +994,9 @@ generate_world :: proc() {
 }
 
 place_world_resources :: proc() {
+    ctx.gs.resource_spawn_distance = 200.0
+    ctx.gs.resource_despawn_distance = 400.0
+
     tree_count := 0
     rock_count := 0
 
@@ -987,49 +1013,78 @@ place_world_resources :: proc() {
 
             #partial switch tile.biome {
             case .forest:
-                if utils.pct_chance(spawn_chance * 3.0) && tree_count < 1000 {
-                    tree := entity_create(.tree)
-                    tree.pos = world_pos + Vec2{
-                        utils.rand_f32_range(0, TILE_SIZE),
-                        utils.rand_f32_range(0, TILE_SIZE)
-                    }
+                if utils.pct_chance(spawn_chance * 3.0) && tree_count < 20000 {
+                    append(&ctx.gs.resource_locations, Resource_Location{
+                        pos = world_pos + Vec2{
+                            utils.rand_f32_range(0, TILE_SIZE),
+                            utils.rand_f32_range(0, TILE_SIZE)
+                        },
+                        kind = .tree,
+                    })
                     tree_count += 1
                 }
 
             case .rocky:
-                if utils.pct_chance(spawn_chance * 2.0) && rock_count < 500 {
-                    rock := entity_create(.rock)
-                    rock.pos = world_pos + Vec2{
-                        utils.rand_f32_range(0, TILE_SIZE),
-                        utils.rand_f32_range(0, TILE_SIZE)
-                    }
+                if utils.pct_chance(spawn_chance * 2.0) && rock_count < 10000 {
+                    append(&ctx.gs.resource_locations, Resource_Location{
+                        pos = world_pos + Vec2{
+                            utils.rand_f32_range(0, TILE_SIZE),
+                            utils.rand_f32_range(0, TILE_SIZE)
+                        },
+                        kind = .rock,
+                    })
                     rock_count += 1
                 }
 
             case .grassland:
-                if utils.pct_chance(spawn_chance * 0.5) && tree_count < 1000 {
-                    tree := entity_create(.tree)
-                    tree.pos = world_pos + Vec2{
-                        utils.rand_f32_range(0, TILE_SIZE),
-                        utils.rand_f32_range(0, TILE_SIZE)
-                    }
+                if utils.pct_chance(spawn_chance * 1.0) && tree_count < 20000 {
+                    append(&ctx.gs.resource_locations, Resource_Location{
+                        pos = world_pos + Vec2{
+                            utils.rand_f32_range(0, TILE_SIZE),
+                            utils.rand_f32_range(0, TILE_SIZE)
+                        },
+                        kind = .tree,
+                    })
                     tree_count += 1
                 }
 
             case .desert:
-                if utils.pct_chance(spawn_chance * 0.2) && rock_count < 500 {
-                    rock := entity_create(.rock)
-                    rock.pos = world_pos + Vec2{
-                        utils.rand_f32_range(0, TILE_SIZE),
-                        utils.rand_f32_range(0, TILE_SIZE)
-                    }
+                if utils.pct_chance(spawn_chance * 0.2) && rock_count < 10000 {
+                    append(&ctx.gs.resource_locations, Resource_Location{
+                        pos = world_pos + Vec2{
+                            utils.rand_f32_range(0, TILE_SIZE),
+                            utils.rand_f32_range(0, TILE_SIZE)
+                        },
+                        kind = .rock,
+                    })
                     rock_count += 1
                 }
             }
         }
     }
 
-    log.info("Placed resources: trees={}, rocks={}", tree_count, rock_count)
+    log.info("Stored resource locations: trees={}, rocks={}", tree_count, rock_count)
+}
+
+update_dynamic_resources :: proc() {
+    player_pos := get_player().pos
+
+    for &resource in ctx.gs.resource_locations {
+        distance := linalg.length(resource.pos - player_pos)
+
+        if distance <= ctx.gs.resource_spawn_distance && resource.spawned_handle.id == 0 {
+            entity := entity_create(resource.kind)
+            entity.pos = resource.pos
+            resource.spawned_handle = entity.handle
+        }
+
+        if distance > ctx.gs.resource_despawn_distance && resource.spawned_handle.id != 0 {
+            if entity := entity_from_handle(resource.spawned_handle); entity != nil {
+                entity_destroy(entity)
+            }
+            resource.spawned_handle = {}
+        }
+    }
 }
 
 get_tile_at_pos :: proc(world_pos: Vec2) -> ^World_Tile {
@@ -1222,4 +1277,10 @@ tile_to_world :: proc(tile_x, tile_y: int) -> Vec2 {
     world_y := f32(tile_y * TILE_SIZE) - auto_cast half_size
 
     return Vec2{world_x, world_y}
+}
+
+Resource_Location :: struct {
+	pos: Vec2,
+	kind: Entity_Kind,
+	spawned_handle: Entity_Handle,
 }
