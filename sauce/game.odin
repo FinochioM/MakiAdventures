@@ -319,6 +319,8 @@ game_update :: proc() {
 
 	utils.animate_to_target_v2(&ctx.gs.cam_pos, get_player().pos, ctx.delta_t, rate=10)
 
+	//constrain_camera_to_world_bounds()
+
 	// ... add whatever other systems you need here to make epic game
 
 	// day & night
@@ -426,18 +428,18 @@ game_draw :: proc() {
 		hunger_bar_y := y - 12
 
 		health_bg_rect := Rect{bar_x, health_bar_y, bar_x + bar_width, health_bar_y + bar_height}
-		draw.draw_rect(health_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9}, flags = flags)
+		draw.draw_rect(health_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9}, flags = flags, z_layer = .ui)
 
 		health_fill_width := (player.health / player.max_health) * bar_width
 		health_fill_rect := Rect{bar_x, health_bar_y, bar_x + health_fill_width, health_bar_y + bar_height}
-		draw.draw_rect(health_fill_rect, col = Vec4{1.0, 0.0, 0.0, 0.8}, flags = flags)
+		draw.draw_rect(health_fill_rect, col = Vec4{1.0, 0.0, 0.0, 0.8}, flags = flags, z_layer = .ui)
 
 		hunger_bg_rect := Rect{bar_x, hunger_bar_y, bar_x + bar_width, hunger_bar_y + bar_height}
-		draw.draw_rect(hunger_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9}, flags = flags)
+		draw.draw_rect(hunger_bg_rect, col = Vec4{0.2, 0.2, 0.2, 0.9}, flags = flags, z_layer = .ui)
 
 		hunger_fill_width := (player.hunger / player.max_hunger) * bar_width
 		hunger_fill_rect := Rect{bar_x, hunger_bar_y, bar_x + hunger_fill_width, hunger_bar_y + bar_height}
-		draw.draw_rect(hunger_fill_rect, col = Vec4{0.8, 0.6, 0.0, 0.8}, flags = flags)
+		draw.draw_rect(hunger_fill_rect, col = Vec4{0.8, 0.6, 0.0, 0.8}, flags = flags, z_layer = .ui)
 
 		time_str := fmt.tprintf("Time: %.2f", ctx.gs.time_of_day)
 		time_x, time_y := screen_pivot(.top_right)
@@ -969,13 +971,13 @@ generate_world :: proc() {
 }
 
 place_world_resources :: proc() {
-	tree_count := 0
-	rock_count := 0
+    tree_count := 0
+    rock_count := 0
 
     for y in 0..<WORLD_SIZE {
         for x in 0..<WORLD_SIZE {
             tile := ctx.gs.world_tiles[x][y]
-            world_pos := Vec2{f32(x * TILE_SIZE), f32(y * TILE_SIZE)}
+            world_pos := tile_to_world(x, y)
 
             if tile.type == .water {
                 continue
@@ -1031,45 +1033,79 @@ place_world_resources :: proc() {
 }
 
 get_tile_at_pos :: proc(world_pos: Vec2) -> ^World_Tile {
-	tile_x := int(world_pos.x / TILE_SIZE)
-	tile_y := int(world_pos.y / TILE_SIZE)
+    tile_x, tile_y := world_to_tile(world_pos)
 
-	if tile_x < 0 || tile_x >= WORLD_SIZE || tile_y < 0 || tile_y >= WORLD_SIZE {
-		return nil
-	}
+    if tile_x < 0 || tile_x >= WORLD_SIZE || tile_y < 0 || tile_y >= WORLD_SIZE {
+        return nil
+    }
 
-	return &ctx.gs.world_tiles[tile_x][tile_y]
+    return &ctx.gs.world_tiles[tile_x][tile_y]
 }
 
 render_world_tiles :: proc() {
-	cam_pos := ctx.gs.cam_pos
-	zoom := get_camera_zoom()
-	viewport_width := f32(window_w) / zoom
-	viewport_height := f32(window_h) / zoom
+    cam_pos := ctx.gs.cam_pos
+    zoom := get_camera_zoom()
+    viewport_width := f32(window_w) / zoom
+    viewport_height := f32(window_h) / zoom
 
-	padding := f32(TILE_SIZE * 2)
+    cam_tile_x, cam_tile_y := world_to_tile(cam_pos)
 
-	start_x := int((cam_pos.x - viewport_width / 2 - padding) / TILE_SIZE)
-	end_x := int((cam_pos.x + viewport_width / 2 + padding) / TILE_SIZE)
-	start_y := int((cam_pos.y - viewport_height / 2 - padding) / TILE_SIZE)
-	end_y := int((cam_pos.y + viewport_height / 2 + padding) / TILE_SIZE)
+    padding := int(TILE_SIZE)
 
-	start_x = max(0, start_x)
-	end_x = min(WORLD_SIZE - 1, end_x)
-	start_y = max(0, start_y)
-	end_y = min(WORLD_SIZE - 1, end_y)
+    tiles_in_view_x := int(viewport_width / TILE_SIZE) + 2
+    tiles_in_view_y := int(viewport_height / TILE_SIZE) + 2
+
+    start_x := cam_tile_x - tiles_in_view_x/2
+    end_x := cam_tile_x + tiles_in_view_x/2
+    start_y := cam_tile_y - tiles_in_view_y/2
+    end_y := cam_tile_y + tiles_in_view_y/2
+
+    start_x = max(0, start_x)
+    end_x = min(WORLD_SIZE - 1, end_x)
+    start_y = max(0, start_y)
+    end_y = min(WORLD_SIZE - 1, end_y)
+
+    tiles_width := end_x - start_x + 1
+    tiles_height := end_y - start_y + 1
+    total_tiles := tiles_width * tiles_height
+
+    max_tiles_to_render := 7000
+
+    if total_tiles > max_tiles_to_render {
+        center_x := (start_x + end_x) / 2
+        center_y := (start_y + end_y) / 2
+
+        max_dimension := int(math.sqrt(f32(max_tiles_to_render)))
+        half_width := max_dimension / 2
+        half_height := max_dimension / 2
+
+        start_x = max(0, center_x - half_width)
+        end_x = min(WORLD_SIZE - 1, center_x + half_width)
+        start_y = max(0, center_y - half_height)
+        end_y = min(WORLD_SIZE - 1, center_y + half_height)
+    }
+
+    pixel_overlap := f32(0.5)
 
     for y in start_y..=end_y {
         for x in start_x..=end_x {
             tile := ctx.gs.world_tiles[x][y]
-            world_pos := Vec2{f32(x * TILE_SIZE), f32(y * TILE_SIZE)}
+
+            world_pos := tile_to_world(x, y)
+
+            adjusted_pos := Vec2{
+                world_pos.x - pixel_overlap,
+                world_pos.y - pixel_overlap
+            }
+
+            size_adjust := Vec2{TILE_SIZE + pixel_overlap * 2, TILE_SIZE + pixel_overlap * 2}
 
             sprite := get_sprite_for_tile_type(tile.type)
             if sprite != .nil {
-                draw.draw_sprite(
-                    world_pos,
-                    sprite,
-                    pivot = .bottom_left,
+                rect := shape.rect_make(adjusted_pos, size_adjust, Pivot.bottom_left)
+                draw.draw_rect(
+                    rect,
+                    sprite = sprite,
                     z_layer = .background
                 )
             }
@@ -1137,9 +1173,53 @@ interact_with_world :: proc(player: ^Entity) {
 }
 
 update_player_bounds :: proc(player: ^Entity) {
-    world_bounds := f32(WORLD_SIZE * TILE_SIZE)
+    world_size_pixels := f32(WORLD_SIZE * TILE_SIZE)
+    half_size := world_size_pixels / 2
+
     margin := f32(1)
 
-    player.pos.x = math.clamp(player.pos.x, margin, world_bounds - margin)
-    player.pos.y = math.clamp(player.pos.y, margin, world_bounds - margin)
+    player.pos.x = math.clamp(player.pos.x, -half_size + margin, half_size - margin)
+    player.pos.y = math.clamp(player.pos.y, -half_size + margin, half_size - margin)
+}
+
+constrain_camera_to_world_bounds :: proc() {
+    zoom := get_camera_zoom()
+    viewport_width := f32(window_w) / zoom
+    viewport_height := f32(window_h) / zoom
+
+    world_bounds := f32(WORLD_SIZE * TILE_SIZE)
+
+    half_viewport_width := viewport_width / 2
+    half_viewport_height := viewport_height / 2
+
+    min_cam_x := half_viewport_width
+    min_cam_y := half_viewport_height
+    max_cam_x := world_bounds - half_viewport_width
+    max_cam_y := world_bounds - half_viewport_height
+
+    ctx.gs.cam_pos.x = math.clamp(ctx.gs.cam_pos.x, min_cam_x, max_cam_x)
+    ctx.gs.cam_pos.y = math.clamp(ctx.gs.cam_pos.y, min_cam_y, max_cam_y)
+}
+
+world_to_tile :: proc(world_pos: Vec2) -> (int, int) {
+    world_size_pixels := WORLD_SIZE * TILE_SIZE
+    half_size := world_size_pixels / 2
+
+    adjusted_x := world_pos.x + auto_cast half_size
+    adjusted_y := world_pos.y + auto_cast half_size
+
+    tile_x := int(adjusted_x / TILE_SIZE)
+    tile_y := int(adjusted_y / TILE_SIZE)
+
+    return tile_x, tile_y
+}
+
+tile_to_world :: proc(tile_x, tile_y: int) -> Vec2 {
+    world_size_pixels := WORLD_SIZE * TILE_SIZE
+    half_size := world_size_pixels / 2
+
+    world_x := f32(tile_x * TILE_SIZE) - auto_cast half_size
+    world_y := f32(tile_y * TILE_SIZE) - auto_cast half_size
+
+    return Vec2{world_x, world_y}
 }
