@@ -254,7 +254,7 @@ game_update :: proc() {
 		player := entity_create(.player)
 		ctx.gs.player_handle = player.handle
 
-		ctx.gs.day_cycle_speed = 0.0 // 200 seconds -> 0.005
+		ctx.gs.day_cycle_speed = 0.005 // 200 seconds -> 0.005
 		ctx.gs.time_of_day = 0.0
 
 		ctx.gs.enemy_spawn_interval = 3.0

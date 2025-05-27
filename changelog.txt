@@ -9,7 +9,7 @@ dying. (play death animation and re-run the game) DONE.
 day & night cycle. DONE.
 torch. DONE.
 enemies. DONE.
-killing enemies.
+killing enemies. DONE.
 
 --- v0.3
 inventory.
