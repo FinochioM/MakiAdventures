@@ -92,24 +92,24 @@ event_callback :: proc "c" (event: ^sapp.Event) { // events example: https://flo
 	context = logger.get_context_for_logging() // only needed because we error down below
 
 	input_state := &_actual_input_state
-	
+
 	#partial switch event.type {
-	
+
 		case .RESIZED:
 		if window_resize_callback == nil {
 			log.error("no window_resize_callback defined for input package")
 		} else {
 			window_resize_callback(int(event.window_width), int(event.window_height))
 		}
-	
+
 		case .MOUSE_SCROLL:
 		input_state.scroll_x = event.scroll_x
 		input_state.scroll_y = event.scroll_y
-	
+
 		case .MOUSE_MOVE:
 		input_state.mouse_x = event.mouse_x
 		input_state.mouse_y = event.mouse_y
-	
+
 		case .MOUSE_UP:
 		if .down in input_state.keys[map_sokol_mouse_button(event.mouse_button)] {
 			input_state.keys[map_sokol_mouse_button(event.mouse_button)] -= { .down }
@@ -119,7 +119,7 @@ event_callback :: proc "c" (event: ^sapp.Event) { // events example: https://flo
 		if !(.down in input_state.keys[map_sokol_mouse_button(event.mouse_button)]) {
 			input_state.keys[map_sokol_mouse_button(event.mouse_button)] += { .down, .pressed }
 		}
-	
+
 		case .KEY_UP:
 		if .down in input_state.keys[event.key_code] {
 			input_state.keys[event.key_code] -= { .down }
@@ -263,7 +263,7 @@ Key_Code :: enum {
 	RIGHT_ALT = 346,
 	RIGHT_SUPER = 347,
 	MENU = 348,
-	
+
 	// randy: adding the mouse buttons on the end here so we can unify the enum and not need to use sapp.Mousebutton
 	LEFT_MOUSE = 400,
 	RIGHT_MOUSE = 401,

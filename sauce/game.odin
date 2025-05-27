@@ -1069,7 +1069,7 @@ render_world_tiles :: proc() {
     tiles_height := end_y - start_y + 1
     total_tiles := tiles_width * tiles_height
 
-    max_tiles_to_render := 7000
+    max_tiles_to_render := 50000
 
     if total_tiles > max_tiles_to_render {
         center_x := (start_x + end_x) / 2

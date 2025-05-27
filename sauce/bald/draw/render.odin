@@ -35,7 +35,7 @@ Render_State :: struct {
 }
 render_state: Render_State
 
-MAX_QUADS :: 8192 * 2
+MAX_QUADS :: 150000
 MAX_VERTS :: MAX_QUADS * 4
 
 actual_quad_data: [MAX_QUADS * size_of(Quad)]u8
