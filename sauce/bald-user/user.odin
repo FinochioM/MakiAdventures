@@ -76,6 +76,15 @@ Sprite_Name :: enum {
 	player_run,
 	player_idle,
 	torch,
+
+	tile_grass,
+	tile_dirt,
+	tile_stone,
+	tile_water,
+	tile_sand,
+
+	tree,
+	rock,
 	// to add new sprites, just put the .png in the res/images folder
 	// and add the name to the enum here
 	//

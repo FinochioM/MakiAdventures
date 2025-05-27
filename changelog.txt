@@ -12,7 +12,7 @@ enemies. DONE.
 killing enemies. DONE.
 
 --- v0.3
+better world generation.
 inventory.
-biomes or chunks.
 spawn trees randomly.
 break trees when punching.

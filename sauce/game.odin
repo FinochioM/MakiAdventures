@@ -23,6 +23,7 @@ import "core:fmt"
 import "core:mem"
 import "core:math"
 import "core:math/linalg"
+import "core:math/noise"
 
 import sapp "bald:sokol/app"
 import spall "core:prof/spall"
@@ -71,6 +72,12 @@ Game_State :: struct {
 	current_enemy_count: int,
 	last_night_check: bool,
 
+	world_tiles: [WORLD_SIZE][WORLD_SIZE]World_Tile,
+	world_generated: bool,
+	terrain_seed: i64,
+	moisture_seed: i64,
+	fertility_seed: i64,
+
 	scratch: struct {
 		all_entities: []Entity_Handle,
 	}
@@ -109,6 +116,33 @@ Light_Source :: struct {
 	flicker_speed: f32,
 	flicker_amount: f32,
 }
+
+WORLD_SIZE :: 512
+TILE_SIZE :: 32
+
+Tile_Type :: enum u8 {
+	grass,
+	dirt,
+	stone,
+	water,
+	sand,
+}
+
+Biome_Type :: enum {
+	grassland,
+	forest,
+	desert,
+	swamp,
+	rocky,
+}
+
+World_Tile :: struct {
+	type: Tile_Type,
+	biome: Biome_Type,
+	fertility: f32, // affects resource spawning
+	moisture: f32, // affects what can grow and what cannot
+}
+
 
 //
 // entity system
@@ -180,6 +214,8 @@ Entity_Kind :: enum {
 	player,
 	torch,
 	enemy,
+	tree,
+	rock,
 }
 
 entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
@@ -192,6 +228,8 @@ entity_setup :: proc(e: ^Entity, kind: Entity_Kind) {
 		case .player: setup_player(e)
 		case .torch:  setup_torch(e)
 		case .enemy:  setup_enemy(e)
+		case .tree:   setup_tree(e)
+		case .rock:   setup_rock(e)
 	}
 }
 
@@ -243,6 +281,8 @@ game_update :: proc() {
 
 	// setup world for first game tick
 	if ctx.gs.ticks == 0 {
+		generate_world()
+
 		init_lightning()
 
 		torch := entity_create(.torch)
@@ -301,9 +341,12 @@ game_update :: proc() {
 		ctx.gs.enemy_spawn_timer = 0.0
 	}
 
+	/*
 	if !ctx.gs.last_night_check && !is_night {
 		log.info("Dawn breaks")
 	}
+	*/
+
 	ctx.gs.last_night_check = is_night
 
 	// TESTING DAY AND NIGHT
@@ -333,6 +376,7 @@ game_draw :: proc() {
 	draw.draw_frame.ndc_to_world_xform = get_world_space_camera() * linalg.inverse(get_world_space_proj())
 	draw.draw_frame.bg_repeat_tex0_atlas_uv = draw.atlas_uv_from_sprite(.bg_repeat_tex0)
 
+	/*
 	// background thing
 	{
 		// identity matrices, so we're in clip space
@@ -341,18 +385,27 @@ game_draw :: proc() {
 		// draw rect that covers the whole screen
 		draw.draw_rect(Rect{ -1, -1, 1, 1}, flags=.background_pixels) // we leave it in the hands of the shader
 	}
+	*/
 
-	// world
-	{
-		draw.push_coord_space(get_world_space())
+   {
+        draw.push_coord_space(get_world_space())
 
-		draw.draw_text({0, -50}, "sugon", pivot=.bottom_center, col={0,0,0,0.5})
+        render_world_tiles()
 
-		for handle in get_all_ents() {
-			e := entity_from_handle(handle)
-			e.draw_proc(e^)
-		}
-	}
+        draw.push_z_layer(.shadow)
+        for handle in get_all_ents() {
+            e := entity_from_handle(handle)
+            if e.kind == .player || e.kind == .enemy {
+                draw.draw_sprite(e.pos, .shadow_medium, col={1,1,1,0.2})
+            }
+        }
+
+        draw.push_z_layer(.playspace)
+        for handle in get_all_ents() {
+            e := entity_from_handle(handle)
+            e.draw_proc(e^)
+        }
+    }
 
 	// ui?
 	{
@@ -479,6 +532,8 @@ setup_player :: proc(e: ^Entity) {
 				}
 			}
 
+			update_player_bounds(e)
+
 			if e.hunger <= 0.0 {
 				e.time_since_last_hunger_damage += ctx.delta_t
 				if e.time_since_last_hunger_damage >= 2.0 {
@@ -495,6 +550,10 @@ setup_player :: proc(e: ^Entity) {
 					player_attack(e)
 					e.last_attack_time = current_time
 				}
+			}
+
+			if is_action_pressed(.interact) {
+				interact_with_world(e)
 			}
 
             if e.show_attack_rect {
@@ -535,7 +594,7 @@ setup_player :: proc(e: ^Entity) {
 
                 // Create rect and draw it
                 attack_rect := shape.rect_make(e.attack_rect_pos, e.attack_rect_size, utils.Pivot.center_center)
-                draw.draw_rect(attack_rect, col=Vec4{1, 0, 0, alpha * 0.5}, outline_col=Vec4{1, 0, 0, alpha})
+                draw.draw_rect(attack_rect, col=Vec4{1, 0, 0, alpha * 0.5}, outline_col=Vec4{1, 0, 0, alpha}, z_layer = .playspace)
             }
 		}
 	}
@@ -857,4 +916,230 @@ player_attack :: proc(player: ^Entity) {
             break
         }
     }
+}
+
+generate_world :: proc() {
+    ctx.gs.terrain_seed = 12345
+    ctx.gs.moisture_seed = 54321
+    ctx.gs.fertility_seed = 98765
+
+    log.info("Generating world...")
+
+    for y in 0..<WORLD_SIZE {
+        for x in 0..<WORLD_SIZE {
+            tile := &ctx.gs.world_tiles[x][y]
+
+            world_x := f32(x) / f32(WORLD_SIZE)
+            world_y := f32(y) / f32(WORLD_SIZE)
+
+            terrain_noise := noise.noise_2d(ctx.gs.terrain_seed, {auto_cast world_x * 8, auto_cast world_y * 8}) * 0.5 +
+                           noise.noise_2d(ctx.gs.terrain_seed, {auto_cast world_x * 16, auto_cast world_y * 16}) * 0.3 +
+                           noise.noise_2d(ctx.gs.terrain_seed, {auto_cast world_x * 32, auto_cast world_y * 32}) * 0.2
+
+            moisture_noise := noise.noise_2d(ctx.gs.moisture_seed, {auto_cast world_x * 6, auto_cast world_y * 6})
+            fertility_noise := noise.noise_2d(ctx.gs.fertility_seed, {auto_cast world_x * 4, auto_cast world_y * 4})
+
+            terrain_value := (terrain_noise + 1.0) * 0.5
+            tile.moisture = (moisture_noise + 1.0) * 0.5
+            tile.fertility = (fertility_noise + 1.0) * 0.5
+
+            if tile.moisture > 0.7 && terrain_value < 0.3 {
+                tile.biome = .swamp
+                tile.type = .water
+            } else if tile.moisture < 0.3 && terrain_value > 0.6 {
+                tile.biome = .desert
+                tile.type = .sand
+            } else if terrain_value > 0.8 {
+                tile.biome = .rocky
+                tile.type = .stone
+            } else if tile.fertility > 0.6 {
+                tile.biome = .forest
+                tile.type = .grass
+            } else {
+                tile.biome = .grassland
+                tile.type = .grass
+            }
+        }
+    }
+
+    place_world_resources()
+
+    ctx.gs.world_generated = true
+    log.info("World generation complete!")
+}
+
+place_world_resources :: proc() {
+	tree_count := 0
+	rock_count := 0
+
+    for y in 0..<WORLD_SIZE {
+        for x in 0..<WORLD_SIZE {
+            tile := ctx.gs.world_tiles[x][y]
+            world_pos := Vec2{f32(x * TILE_SIZE), f32(y * TILE_SIZE)}
+
+            if tile.type == .water {
+                continue
+            }
+
+            spawn_chance := tile.fertility * 0.1
+
+            #partial switch tile.biome {
+            case .forest:
+                if utils.pct_chance(spawn_chance * 3.0) && tree_count < 1000 {
+                    tree := entity_create(.tree)
+                    tree.pos = world_pos + Vec2{
+                        utils.rand_f32_range(0, TILE_SIZE),
+                        utils.rand_f32_range(0, TILE_SIZE)
+                    }
+                    tree_count += 1
+                }
+
+            case .rocky:
+                if utils.pct_chance(spawn_chance * 2.0) && rock_count < 500 {
+                    rock := entity_create(.rock)
+                    rock.pos = world_pos + Vec2{
+                        utils.rand_f32_range(0, TILE_SIZE),
+                        utils.rand_f32_range(0, TILE_SIZE)
+                    }
+                    rock_count += 1
+                }
+
+            case .grassland:
+                if utils.pct_chance(spawn_chance * 0.5) && tree_count < 1000 {
+                    tree := entity_create(.tree)
+                    tree.pos = world_pos + Vec2{
+                        utils.rand_f32_range(0, TILE_SIZE),
+                        utils.rand_f32_range(0, TILE_SIZE)
+                    }
+                    tree_count += 1
+                }
+
+            case .desert:
+                if utils.pct_chance(spawn_chance * 0.2) && rock_count < 500 {
+                    rock := entity_create(.rock)
+                    rock.pos = world_pos + Vec2{
+                        utils.rand_f32_range(0, TILE_SIZE),
+                        utils.rand_f32_range(0, TILE_SIZE)
+                    }
+                    rock_count += 1
+                }
+            }
+        }
+    }
+
+    log.info("Placed resources: trees={}, rocks={}", tree_count, rock_count)
+}
+
+get_tile_at_pos :: proc(world_pos: Vec2) -> ^World_Tile {
+	tile_x := int(world_pos.x / TILE_SIZE)
+	tile_y := int(world_pos.y / TILE_SIZE)
+
+	if tile_x < 0 || tile_x >= WORLD_SIZE || tile_y < 0 || tile_y >= WORLD_SIZE {
+		return nil
+	}
+
+	return &ctx.gs.world_tiles[tile_x][tile_y]
+}
+
+render_world_tiles :: proc() {
+	cam_pos := ctx.gs.cam_pos
+	zoom := get_camera_zoom()
+	viewport_width := f32(window_w) / zoom
+	viewport_height := f32(window_h) / zoom
+
+	padding := f32(TILE_SIZE * 2)
+
+	start_x := int((cam_pos.x - viewport_width / 2 - padding) / TILE_SIZE)
+	end_x := int((cam_pos.x + viewport_width / 2 + padding) / TILE_SIZE)
+	start_y := int((cam_pos.y - viewport_height / 2 - padding) / TILE_SIZE)
+	end_y := int((cam_pos.y + viewport_height / 2 + padding) / TILE_SIZE)
+
+	start_x = max(0, start_x)
+	end_x = min(WORLD_SIZE - 1, end_x)
+	start_y = max(0, start_y)
+	end_y = min(WORLD_SIZE - 1, end_y)
+
+    for y in start_y..=end_y {
+        for x in start_x..=end_x {
+            tile := ctx.gs.world_tiles[x][y]
+            world_pos := Vec2{f32(x * TILE_SIZE), f32(y * TILE_SIZE)}
+
+            sprite := get_sprite_for_tile_type(tile.type)
+            if sprite != .nil {
+                draw.draw_sprite(
+                    world_pos,
+                    sprite,
+                    pivot = .bottom_left,
+                    z_layer = .background
+                )
+            }
+        }
+    }
+}
+
+get_sprite_for_tile_type :: proc(tile_type: Tile_Type) -> Sprite_Name {
+	switch tile_type {
+		case .grass: return .tile_grass
+		case .dirt: return .tile_dirt
+		case .stone: return .tile_stone
+		case .water: return .tile_water
+		case .sand: return .tile_sand
+	}
+
+	return nil
+}
+
+setup_tree :: proc(e: ^Entity) {
+	e.kind = .tree
+	e.sprite = .tree
+	e.health = 3.0
+	e.draw_pivot = .bottom_center
+
+	e.update_proc = proc(e: ^Entity) {
+		if e.health <= 0 {
+			entity_destroy(e)
+		}
+	}
+}
+
+setup_rock :: proc(e: ^Entity) {
+	e.kind = .rock
+	e.sprite = .rock
+	e.health = 5.0
+	e.draw_pivot = .bottom_center
+
+	e.update_proc = proc(e: ^Entity) {
+		if e.health <= 0 {
+			entity_destroy(e)
+		}
+	}
+}
+
+interact_with_world :: proc(player: ^Entity) {
+    interact_range := f32(40.0)
+
+    for handle in get_all_ents() {
+        e := entity_from_handle(handle)
+
+        if e.kind != .tree && e.kind != .rock {
+            continue
+        }
+
+        distance := linalg.length(player.pos - e.pos)
+        if distance <= interact_range {
+            e.health -= 1.0
+            e.hit_flash = Vec4{1, 1, 1, 0.5}
+
+            // Play interaction sound here
+            break
+        }
+    }
+}
+
+update_player_bounds :: proc(player: ^Entity) {
+    world_bounds := f32(WORLD_SIZE * TILE_SIZE)
+    margin := f32(1)
+
+    player.pos.x = math.clamp(player.pos.x, margin, world_bounds - margin)
+    player.pos.y = math.clamp(player.pos.y, margin, world_bounds - margin)
 }
